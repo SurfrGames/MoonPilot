@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Moon Pilot</title>
+<style>
+:root{--bg:#05070c;--panel:rgba(12,18,28,.84);--line:#263247;--text:#e6edf7;--dim:#8fa0b8;--accent:#ffb454;--ai:#59c2ff;--good:#7fe38b;--bad:#ff6b6b}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,"Segoe UI",sans-serif;overflow:hidden;user-select:none;-webkit-user-select:none}
+canvas{display:block;position:fixed;inset:0;touch-action:none}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+button{background:#111a29;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px 12px;font:inherit;cursor:pointer;touch-action:none}
+button.on,button:active{border-color:var(--accent);color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#1a1205;font-weight:600}
+.hide{display:none!important}
+#hud{position:fixed;top:12px;left:12px;width:236px}
+#hud small{color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
+#goal{font-weight:600;color:var(--accent);margin:2px 0 6px}
+.row{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+.row span:first-child{color:var(--dim)}
+.warn{color:var(--bad)}.ok{color:var(--good)}.ai{color:var(--ai)}
+#toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);font-weight:600;transition:opacity .4s;opacity:0;pointer-events:none}
+#pad{position:fixed;left:12px;right:12px;bottom:12px;display:flex;gap:8px;align-items:flex-end;justify-content:space-between;pointer-events:none}
+#pad>*{pointer-events:auto}
+#thrbox{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px}
+#thr{writing-mode:vertical-lr;direction:rtl;height:150px;accent-color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(3,auto);gap:6px}
+#top{position:fixed;top:12px;right:12px;display:flex;gap:6px}
+.screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(3,5,9,.72);padding:16px;overflow:auto}
+.screen .panel{max-width:560px;width:100%;padding:20px}
+h1{margin:0 0 4px;font-size:28px}h2{margin:0 0 8px;font-size:20px}
+.sub{color:var(--dim);margin-bottom:14px}
+.card{display:block;width:100%;text-align:left;margin-top:8px;padding:12px}
+.card b{display:block;font-size:16px}.card span{color:var(--dim);font-size:13px}
+.stars{font-size:30px;color:var(--accent);letter-spacing:4px}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-variant-numeric:tabular-nums}
+td{padding:3px 0}td:last-child{text-align:right}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+kbd{border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px ui-monospace,monospace}
+@media(max-width:620px){#hud{width:200px;font-size:13px}.keys{display:none}#thr{height:120px}}
+</style>
+</head>
+<body>
+<div id="hud" class="panel hide">
+  <small id="mname"></small>
+  <div id="goal"></div>
+  <div class="row"><span>Time</span><span id="t"></span></div>
+  <div class="row"><span>Altitude</span><span id="h"></span></div>
+  <div class="row"><span>Vertical speed</span><span id="vr"></span></div>
+  <div class="row"><span>Ground speed</span><span id="vh"></span></div>
+  <div class="row"><span>Fuel</span><span id="fuel"></span></div>
+  <div class="row"><span>Orbit high / low</span><span id="orb"></span></div>
+  <div class="row"><span>Tilt from vertical</span><span id="tilt"></span></div>
+  <div class="row ai"><span class="ai">AI ghost</span><span id="aih"></span></div>
+</div>
+<div id="toast" class="panel"></div>
+<div id="top" class="hide">
+  <button id="warpdn">−</button><button id="warp" disabled>1×</button><button id="warpup">+</button>
+  <button id="camb">View</button><button id="restart">Restart</button><button id="quit">Menu</button>
+</div>
+<div id="pad" class="hide">
+  <div id="thrbox" class="panel"><span id="thrv">0%</span><input id="thr" type="range" min="0" max="100" value="0"><span>Throttle</span></div>
+  <div class="panel keys">
+    <kbd>W</kbd>/<kbd>S</kbd> throttle · <kbd>Z</kbd> full · <kbd>X</kbd> cut · <kbd>A</kbd>/<kbd>D</kbd> pitch · <kbd>Q</kbd>/<kbd>E</kbd> yaw<br>
+    <kbd>1</kbd> point up · <kbd>2</kbd> prograde · <kbd>3</kbd> retrograde · <kbd>,</kbd>/<kbd>.</kbd> time warp · drag to look
+  </div>
+  <div class="panel">
+    <div class="grid">
+      <button data-hold="up">Up</button><button data-hold="pro">Prograde</button><button data-hold="retro">Retro</button>
+      <button data-key="a">◀ Pitch</button><button data-key="x">Cut</button><button data-key="d">Pitch ▶</button>
+    </div>
+  </div>
+</div>
+<div id="menu" class="screen">
+  <div class="panel">
+    <h1>Moon Pilot</h1>
+    <div class="sub">Fly a real-physics Moon rocket. A neural network taught itself to fly these missions — <span class="ai">its ghost flies beside you</span>. Beat it.</div>
+    <div id="cards"></div>
+  </div>
+</div>
+<div id="brief" class="screen hide">
+  <div class="panel">
+    <h2 id="bname"></h2>
+    <div id="btext" class="sub"></div>
+    <div id="bai" class="ai"></div>
+    <div class="btns"><button id="go" class="primary">Start</button><button id="back">Back</button></div>
+  </div>
+</div>
+<div id="result" class="screen hide">
+  <div class="panel">
+    <h2 id="rtitle"></h2>
+    <div class="stars" id="rstars"></div>
+    <div id="rtext" class="sub"></div>
+    <table id="rtable"></table>
+    <div class="btns"><button id="retry" class="primary">Fly again</button><button id="next">Next mission</button><button id="tomenu">Menu</button></div>
+  </div>
+</div>
+<script src="lib/three.min.js"></script>
+<script src="data/ghosts.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/world.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

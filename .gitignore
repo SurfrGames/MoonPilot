@@ -1,0 +1,6 @@
+__pycache__/
+*.log
+*.zip
+!rocket-lander/models/*.zip
+rocket-lander/models/orbit3d_run2_17M.zip
+rocket-lander/videos/
