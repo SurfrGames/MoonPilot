@@ -343,6 +343,27 @@ def build_viewer(missions):
     print("wrote orbit3d.html")
 
 
+def dailies(model, count=14):
+    """Landing scenarios for the game's daily challenge: only ones the AI itself lands, rows thinned to halve the size."""
+    out, seed = [], 2000
+    while len(out) < count:
+        seed += 1
+        env = Orbit3D(1, seed=seed, record=True, kind=4 if seed % 2 else 3)
+        obs = env.reset()
+        start = {k: getattr(env, k)[0].tolist() for k in ("r", "v", "d", "nrm")} | {
+            "m": float(env.m[0]), "phase": int(env.phase[0]), "theta": float(env.theta[0]), "onPad": False}
+        while True:
+            obs, _, done, info = env.step(model.predict(obs, deterministic=True)[0])
+            if done[0]:
+                break
+        e, rows = info[0]["episode"], info[0]["rec"]
+        if e["out"] == 0:
+            out.append({"start": start, "rows": rows[:-1:2] + [rows[-1]], "ai": {
+                "ok": True, "text": describe(e), "sev": max(abs(e["vr"]) / 3, e["vh"] / 2, e["tilt"] / 15),
+                "t": rows[-1][0], "fuel": rows[-1][12]}})
+    return out
+
+
 def export(model, game=ROOT.parent / "moon-pilot"):
     """Fly the AI through each game mission and save the start state + ghost flight for the game."""
     out, parity = {}, None
@@ -369,6 +390,8 @@ def export(model, game=ROOT.parent / "moon-pilot"):
         print(f"{name:8s} {ai['text']}")
         if name == "deorbit":
             parity = {"start": start, "ctl": ctl, "end": rows[-1][1:4]}
+    out["daily"] = dailies(model)
+    print(f"daily    {len(out['daily'])} challenges")
     (game / "www" / "data" / "ghosts.js").write_text("window.GHOSTS=" + json.dumps(out, separators=(",", ":")) + ";")
     (game / "tools" / "parity.json").write_text(json.dumps(parity))
 

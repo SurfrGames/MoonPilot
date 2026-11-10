@@ -49,11 +49,37 @@ const World = (() => {
   }
   const glowTex = (inner, outer) => tex(128, 128, (g, w) => { g.fillStyle = radial(g, w / 2, w / 2, w / 2, [[0, inner], [1, outer]]); g.fillRect(0, 0, w, w); });
 
+  function sphereGround(g, w, h) {                           // whole-Moon map: shapes widen toward the poles so they look round on the globe
+    g.fillStyle = "#87878a"; g.fillRect(0, 0, w, h);
+    const at = (x, y, r, fn) => {
+      const sx = 1 / Math.max(.12, Math.cos((.5 - y / h) * Math.PI));
+      for (const ox of [-w, 0, w]) { if (x + ox + r * sx < 0 || x + ox - r * sx > w) continue; g.save(); g.translate(x + ox, y); g.scale(sx, 1); fn(); g.restore(); }
+    };
+    for (let i = 0; i < 520; i++) {
+      const r = (.012 + .07 * rnd() ** 2) * h, dark = rnd() < .55;
+      at(rnd() * w, rnd() * h, r, () => {
+        g.fillStyle = radial(g, 0, 0, r, dark ? [[0, "rgba(46,48,56,.5)"], [1, "rgba(128,128,128,0)"]] : [[0, "rgba(206,205,200,.28)"], [1, "rgba(128,128,128,0)"]]);
+        g.beginPath(); g.arc(0, 0, r, 0, 7); g.fill();
+      });
+    }
+    for (let i = 0; i < 3600; i++) {
+      const r = 1.4 + 24 * rnd() ** 4;
+      at(rnd() * w, h * (.03 + .94 * rnd()), r, () => {
+        g.fillStyle = radial(g, 0, 0, r, [[0, "rgba(40,40,46,.55)"], [.8, "rgba(60,60,66,.35)"], [1, "rgba(120,120,120,0)"]]);
+        g.beginPath(); g.arc(0, 0, r, 0, 7); g.fill();
+        g.lineWidth = Math.max(.7, r * .13);
+        g.strokeStyle = "rgba(232,230,222,.5)"; g.beginPath(); g.arc(0, 0, r * .92, .2 * Math.PI, 1.2 * Math.PI); g.stroke();
+        g.strokeStyle = "rgba(24,25,32,.42)"; g.beginPath(); g.arc(0, 0, r * .92, 1.2 * Math.PI, 2.2 * Math.PI); g.stroke();
+      });
+    }
+    for (let i = 0; i < 26000; i++) { g.fillStyle = rnd() < .5 ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.07)"; g.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 2, 1 + rnd()); }
+  }
+
   // ---- Moon, stars, sun glare, Earth ----
   const moon = new THREE.Group(); scene.add(moon);
-  const moonTex = tex(2048, 1024, (g, w, h) => ground(g, w, h, 280, 1100, 2, 28));
+  const moonTex = tex(4096, 2048, sphereGround);
   const ball = new THREE.Mesh(new THREE.SphereGeometry(R, 256, 128),
-    new THREE.MeshStandardMaterial({map: moonTex, bumpMap: moonTex, bumpScale: 3.2, roughness: 1, metalness: 0}));
+    new THREE.MeshStandardMaterial({map: moonTex, bumpMap: moonTex, bumpScale: 2.2, roughness: 1, metalness: 0}));
   ball.rotation.x = Math.PI / 2; moon.add(ball);
   for (const [n, size, lo] of [[5000, 1.2, .35], [350, 2.3, .8]]) {
     const p = new Float32Array(n * 3), c = new Float32Array(n * 3);
@@ -96,7 +122,7 @@ const World = (() => {
   };
   // radius (km), the altitudes (km) between which each disc fades out, its lift above the sphere, and (for the
   // widest) the altitudes between which it fades in. Lifts are centimetres so the legs stand on the ground.
-  const levels = [[400, 60, 150, .004, [4, 8]], [40, 6, 14, .0002], [4, 1.5, 3.5, .00025], [.4, .15, .35, .0003]].map(([radius, lo, hi, lift, fadeIn], k) => {
+  const levels = [[400, 35, 70, .004, [4, 8]], [40, 6, 14, .0002], [4, 1.5, 3.5, .00025], [.4, .15, .35, .0003]].map(([radius, lo, hi, lift, fadeIn], k) => {
     const map = tex(1024, 1024, gridded, true);
     return {radius, lo, hi, fadeIn, mesh: disc(radius, new THREE.MeshStandardMaterial({map, bumpMap: map, bumpScale: radius > 1 ? radius * .01 : 0, roughness: 1, metalness: 0, transparent: true, depthWrite: false}), lift, k + 1)};
   });
@@ -189,6 +215,26 @@ const World = (() => {
     g.setDrawRange(0, 0); scene.add(l); return l;
   }
   const trail = makeTrail(30000, 0xffb454, .9); let ghostTrail = null, lastTrailT = -1e9;
+  const orbit = makeTrail(129, 0xffd9a0, .5);                // the path the rocket is on if the engine stays off
+  function drawOrbit(s) {
+    const P = Physics, hv = P.cross(s.r, s.v), hm2 = P.dot(hv, hv), rm = P.len(s.r);
+    const ev = P.add(P.mul(P.cross(s.v, hv), 1 / P.MU), s.r, -1 / rm), e = P.len(ev);
+    orbit.visible = hm2 > 2e16 && e < .97 && !wrecked;
+    if (!orbit.visible) return;
+    const sl = hm2 / P.MU, a1 = e > 1e-4 ? P.mul(ev, 1 / e) : P.mul(s.r, 1 / rm), a2 = P.unit(P.cross(hv, a1));
+    for (let i = 0; i <= 128; i++) { const th = i / 128 * 6.283185307, r = sl / (1 + e * Math.cos(th)); put(orbit, i, P.add(P.mul(a1, r * Math.cos(th)), a2, r * Math.sin(th))); }
+    orbit.geometry.setDrawRange(0, 129);
+  }
+  // the home screen: a slow fly-around of the Moon with nothing else in the scene
+  function attract(t) {
+    [rocket, rocket.dot, ghost, ghost.dot, trail, ghostTrail, shadow, pad, scorch, orbit, fx, ...levels.map(L => L.mesh)].forEach(o => { if (o) o.visible = false; });
+    const a = t * .03;
+    moon.rotation.z = t * .012;
+    sun.position.set(Math.cos(a - .95), Math.sin(a - .95), .35).normalize(); glare.position.copy(sun.position).multiplyScalar(1.4e6); earth.position.set(-2.6e5, 2.4e5, 1.3e5);
+    camera.position.set(Math.cos(a) * 4300, Math.sin(a) * 4300, 900); camera.up.copy(Z);
+    camera.lookAt(tgt.set(Math.sin(a) * 1100, -Math.cos(a) * 1100, 0));      // look to one side so the Moon sits on the right
+    renderer.render(scene, camera);
+  }
   const put = (line, i, r) => { const a = line.geometry.attributes.position; a.setXYZ(i, r[0] * KM, r[1] * KM, r[2] * KM); a.needsUpdate = true; };
 
   const cam = {mode: "follow", az: .9, el: .28, zoom: 1, whole: 5200}, map = {on: false, rect: [0, 0, 0, 0]};
@@ -207,7 +253,7 @@ const World = (() => {
     ghostTrail = makeTrail(rows.length, 0x59c2ff, .45);
     rows.forEach((r, i) => put(ghostTrail, i, [r[1], r[2], r[3]]));
     pools.forEach(P => P.clear()); anchor = null; shake = squash = 0; wrecked = false; scorch.visible = false; flash.intensity = 0;
-    cam.zoom = 1; cam.mode = "follow";
+    cam.zoom = 1; cam.mode = "follow"; trail.visible = fx.visible = true;
   }
 
   // s: physics state, q: derived values, g: ghost pose or null, f: {dt, legs 0..1, event: "landed" | "crashed" | null}
@@ -217,10 +263,10 @@ const World = (() => {
     let dist;
     if (cam.mode === "follow") {
       up.set(...q.er); east.crossVectors(Z, up); if (east.lengthSq() < 1e-6) east.set(1, 0, 0); east.normalize();
-      north.crossVectors(up, east); dist = cam.zoom * (.06 + .15 * hk);
+      north.crossVectors(up, east); dist = Math.max(.03, cam.zoom * (.06 + .15 * hk));
     } else { up.copy(Z); east.set(1, 0, 0); north.set(0, 1, 0); dist = cam.whole; }
     pose(rocket, s.r, s.d, thr);
-    rocket.setLegs(f.legs);
+    rocket.setLegs(f.legs); drawOrbit(s);
     squash = Math.max(0, squash - dt); rocket.scale.y = 1 - .07 * Math.sin(Math.PI * squash / .45);
     rocket.visible = dist < 6 && !wrecked; rocket.dot.visible = dist > 1.5;
     lamp.intensity = thr * (.85 + .25 * rr()); glow.visible = thr > .01; glow.scale.setScalar(.004 + .009 * thr);
@@ -233,8 +279,9 @@ const World = (() => {
     const lat = Math.asin(dirM.z), lon = Math.atan2(dirM.y, dirM.x);
     const e = V(-Math.sin(lon), Math.cos(lon), 0), n = V().crossVectors(dirM, e);
     basis.makeBasis(e, n, dirM);
+    const view = hk + dist * .5;                             // roughly the camera height: zooming out fades the detail too
     for (const L of levels) {
-      let o = Math.max(0, Math.min(1, (L.hi - hk) / (L.hi - L.lo)));
+      let o = Math.max(0, Math.min(1, (L.hi - view) / (L.hi - L.lo)));
       if (L.fadeIn) o = Math.min(o, Math.max(0, Math.min(1, (hk - L.fadeIn[0]) / (L.fadeIn[1] - L.fadeIn[0]))));
       L.mesh.visible = o > 0; if (!o) continue;
       L.mesh.material.opacity = o; L.mesh.position.copy(dirM).multiplyScalar(R); L.mesh.quaternion.setFromRotationMatrix(basis);
@@ -248,7 +295,7 @@ const World = (() => {
 
     // effects
     const hot = [1, .62 + .2 * rr(), .25], grey = [.74, .73, .7];
-    for (let k = Math.min(40, Math.round(thr * dt * 520 + rr())); k > 0; k--)
+    for (let k = thr > .01 ? Math.min(40, Math.round(thr * dt * 520 + rr())) : 0; k > 0; k--)
       exhaust.emit([(rr() - .5) * .0008, .0008, (rr() - .5) * .0008], [(rr() - .5) * .012, -.045 - rr() * .03, (rr() - .5) * .012],
         Math.min(.22 + rr() * .2, hk / .05 + .03), hot, .55, .0016);
     if (hk < .3) {
@@ -313,10 +360,10 @@ const World = (() => {
     cam.az -= (ev.clientX - drag[0]) * .006; cam.el = Math.max(-.15, Math.min(1.5, cam.el + (ev.clientY - drag[1]) * .006));
     drag = [ev.clientX, ev.clientY];
   };
-  const zoom = k => { if (cam.mode === "follow") cam.zoom = Math.max(.25, Math.min(400, cam.zoom * k)); else cam.whole = Math.max(2300, Math.min(30000, cam.whole * k)); };
+  const zoom = k => { if (cam.mode === "follow") cam.zoom = Math.max(.004, Math.min(4000, cam.zoom * k)); else cam.whole = Math.max(2300, Math.min(30000, cam.whole * k)); };
   el.addEventListener("wheel", ev => { ev.preventDefault(); zoom(Math.exp(ev.deltaY * .0012)); }, {passive: false});
   function resize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
   addEventListener("resize", resize); resize();
 
-  return {setMission, update, project, cam, map, zoom};
+  return {setMission, update, attract, project, cam, map, zoom};
 })();

@@ -31,6 +31,38 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#1a1205
 #land{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);width:220px;height:110px;pointer-events:none;border-radius:10px;border:1px solid var(--line)}
 #aimark{position:fixed;transform:translate(-50%,-50%);color:var(--ai);font-weight:600;font-size:12px;pointer-events:none;text-shadow:0 0 5px #000,0 0 2px #000;white-space:nowrap}
 #top{flex-wrap:wrap;justify-content:flex-end;max-width:calc(100vw - 260px)}
+.home{align-items:center;background:linear-gradient(90deg,rgba(3,5,9,.94) 0%,rgba(3,5,9,.78) 42%,rgba(3,5,9,.08) 100%);justify-content:flex-start;gap:5vw;padding:5vh 6vw}
+.hero{width:min(400px,100%);flex:none}.cards{width:min(430px,100%);flex:none}
+@keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+@keyframes drift{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes sheen{to{background-position:-200% 0}}
+.hero>*,.home .card{animation:rise .7s cubic-bezier(.2,.8,.2,1) both}
+.hero>*:nth-child(2){animation-delay:.08s}.hero>*:nth-child(3){animation-delay:.16s}.hero>*:nth-child(4){animation-delay:.24s}.hero>*:nth-child(5){animation-delay:.32s}
+.mark{border-radius:20px;box-shadow:0 0 44px rgba(255,180,84,.28);animation:rise .7s cubic-bezier(.2,.8,.2,1) both,drift 6s ease-in-out .7s infinite}
+.title{font-size:clamp(40px,6vw,74px);font-weight:300;letter-spacing:.14em;line-height:1;margin:22px 0 14px}
+.title b{font-weight:600;background:linear-gradient(100deg,var(--accent) 35%,#fff1d8 50%,var(--accent) 65%) 0 0/200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sheen 5s linear infinite}
+.tag{color:var(--dim);font-size:15px;margin:0 0 20px}
+.pilot{display:flex;flex-direction:column;gap:6px;color:var(--dim);font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+.pilot input{background:rgba(17,26,41,.8);border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:var(--text);font:600 16px system-ui;letter-spacing:.04em;outline:none;transition:border-color .2s}
+.pilot input:focus{border-color:var(--accent)}
+.sharef{display:flex;gap:8px;align-items:flex-start;margin-top:12px;color:var(--dim);font-size:13px;cursor:pointer}.sharef input{margin-top:3px;accent-color:var(--accent)}.sharef small{display:block;opacity:.8}
+#btable td:first-child{width:34px;color:var(--dim)}#btabs button{padding:6px 10px;font-size:13px}#board{z-index:6}
+.stats{margin-top:14px;color:var(--dim);font-size:13px}
+.home .card{position:relative;background:rgba(14,21,33,.72);backdrop-filter:blur(8px);border-color:var(--line);padding:14px 16px 14px 20px;margin-top:10px;transition:transform .18s,border-color .18s,background .18s}
+.home .card::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:2px;background:var(--line);transition:background .18s}
+.home .card:hover{transform:translateX(8px);border-color:var(--accent);background:rgba(22,32,50,.86);color:var(--text)}
+.home .card:hover::before,.home .card.daily::before{background:var(--accent)}
+.home .card.daily{border-color:rgba(255,180,84,.55)}
+.home .card.daily b::after{content:"TODAY";margin-left:10px;font-size:10px;letter-spacing:.14em;color:#1a1205;background:var(--accent);border-radius:4px;padding:2px 6px;vertical-align:middle}
+#confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:5}
+#confetti i{position:absolute;top:-16px;width:8px;height:14px;border-radius:2px;animation:fall linear both}
+@keyframes fall{to{transform:translateY(106vh) rotate(700deg)}}
+@keyframes glow{0%,100%{box-shadow:0 0 30px rgba(255,180,84,.18)}50%{box-shadow:0 0 70px rgba(255,180,84,.42)}}
+.win .panel{border-color:var(--accent);animation:glow 2.4s ease-in-out infinite}.win #rtitle{color:var(--accent)}
+#cmp th{text-align:right;color:var(--dim);font-weight:500}#cmp td:nth-child(2){text-align:right}
+#chart{width:100%;height:auto;border-radius:8px;border:1px solid var(--line);margin-top:4px}
+@media(max-width:900px){.home{flex-direction:column;align-items:stretch;justify-content:flex-start;gap:18px;background:rgba(3,5,9,.82)}.mark{width:56px;height:56px}.title{margin:12px 0 8px}}
+@media(prefers-reduced-motion:reduce){.hero>*,.home .card,.mark,.title b{animation:none}}
 #toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);font-weight:600;transition:opacity .4s;opacity:0;pointer-events:none}
 #pad{position:fixed;left:12px;right:12px;bottom:12px;display:flex;gap:8px;align-items:flex-end;justify-content:space-between;pointer-events:none}
 #pad>*{pointer-events:auto}
@@ -38,8 +70,8 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#1a1205
 #thr{writing-mode:vertical-lr;direction:rtl;height:150px;accent-color:var(--accent)}
 .grid{display:grid;grid-template-columns:repeat(3,auto);gap:6px}
 #top{position:fixed;top:12px;right:12px;display:flex;gap:6px}
-.screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(3,5,9,.72);padding:16px;overflow:auto}
-.screen .panel{max-width:560px;width:100%;padding:20px}
+.screen{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;background:rgba(3,5,9,.72);padding:16px;overflow:auto}
+.screen .panel{max-width:560px;width:100%;padding:20px;margin:auto}
 h1{margin:0 0 4px;font-size:28px}h2{margin:0 0 8px;font-size:20px}
 .sub{color:var(--dim);margin-bottom:14px}
 .card{display:block;width:100%;text-align:left;margin-top:8px;padding:12px}
@@ -72,7 +104,7 @@ kbd{border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px ui-mo
 <canvas id="land" class="hide" width="440" height="220"></canvas>
 <div id="aimark" class="hide"></div>
 <div id="top" class="hide">
-  <button id="warpdn">−</button><button id="warp" disabled>1×</button><button id="warpup">+</button>
+  <button id="warpdn">−</button><button id="warp" title="Set your own speed">1×</button><button id="warpup">+</button>
   <button id="mapb">Map 2D</button><button id="coachb" title="Show or hide flying tips">Coach</button><button id="camb">View</button><button id="restart">Restart</button><button id="quit">Menu</button>
 </div>
 <div id="pad" class="hide">
@@ -88,12 +120,17 @@ kbd{border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px ui-mo
     </div>
   </div>
 </div>
-<div id="menu" class="screen">
-  <div class="panel">
-    <h1><img src="icon-192.png" alt="" width="48" height="48" style="vertical-align:middle;border-radius:11px;margin-right:12px">Moon Pilot</h1>
-    <div class="sub">Fly a real-physics Moon rocket. A neural network taught itself to fly these missions — <span class="ai">its ghost flies beside you</span>. Beat it.</div>
-    <div id="cards"></div>
+<div id="menu" class="screen home">
+  <div class="hero">
+    <img class="mark" src="icon-192.png" alt="" width="84" height="84">
+    <h1 class="title">MOON <b>PILOT</b></h1>
+    <p class="tag">Fly a real-physics Moon rocket. A neural network taught itself these missions and <span class="ai">its ghost flies beside you</span>. Beat it.</p>
+    <label class="pilot">Pilot name<input id="pname" maxlength="16" placeholder="Your call sign" autocomplete="off" spellcheck="false"></label>
+    <label class="sharef"><input type="checkbox" id="sharef"> Share my flights to help train the AI <small>(flight path and controls only, no personal data)</small></label>
+    <div id="stats" class="stats"></div>
+    <div class="btns"><button id="boardb">Worldwide leaderboard</button></div>
   </div>
+  <div id="cards" class="cards"></div>
 </div>
 <div id="brief" class="screen hide">
   <div class="panel">
@@ -110,13 +147,27 @@ kbd{border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px ui-mo
     <div class="stars" id="rstars"></div>
     <div id="rtext" class="sub"></div>
     <table id="rtable"></table>
-    <div class="btns"><button id="retry" class="primary">Fly again</button><button id="next">Next mission</button><button id="tomenu">Menu</button></div>
+    <canvas id="chart" width="1040" height="360"></canvas>
+    <table id="cmp" class="hide"></table>
+    <div id="rpost" class="sub" style="margin:8px 0 0"></div>
+    <div class="btns"><button id="retry" class="primary">Fly again</button><button id="next">Next mission</button><button id="share">Share</button><button id="rboard">Leaderboard</button><button id="cmpb">Compare with AI</button><button id="savepng">Save chart</button><button id="savejson">Save data</button><button id="tomenu">Menu</button></div>
   </div>
 </div>
+<div id="board" class="screen hide">
+  <div class="panel">
+    <h2>Worldwide leaderboard</h2>
+    <div id="btabs" class="btns" style="margin:0 0 10px"></div>
+    <table id="btable"></table>
+    <div id="bnote" class="sub"></div>
+    <div class="btns"><button id="bclose" class="primary">Close</button></div>
+  </div>
+</div>
+<div id="confetti"></div>
 <script src="lib/three.min.js"></script>
 <script src="data/ghosts.js"></script>
 <script src="js/physics.js"></script>
 <script src="js/world.js"></script>
+<script src="js/backend.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

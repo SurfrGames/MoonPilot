@@ -16,8 +16,16 @@
      brief: "Launch, fly one full orbit (use time warp), then come back down and land. The whole flight the AI learned.",
      steps: ["Launch to orbit as in mission 3, then press X.", "Press . to speed up time for one lap.", "Press 3 and Z to brake, then land as in mission 2."]},
   ].filter(m => window.GHOSTS && GHOSTS[m.id]).map(m => ({...m, ...GHOSTS[m.id]}));
+  const DAY = Math.floor(Date.now() / 864e5);              // days since 1970; 20767 was 10 Nov 2026
+  if (window.GHOSTS && GHOSTS.daily && GHOSTS.daily.length && MISSIONS.length) {
+    const d = GHOSTS.daily[DAY % GHOSTS.daily.length], high = P.len(d.start.r) - P.R > 2500;
+    MISSIONS.unshift({id: "daily-" + DAY, daily: true, name: "Daily Challenge #" + (DAY - 20766), goal: "land", par: Math.round(d.ai.t * 1.3),
+      brief: (high ? "Today's flight starts high and fast. Brake hard, then land softly." : "Today's flight starts low over the surface. Stop your drift and land softly.") + " A new challenge arrives every day.",
+      steps: MISSIONS[0].steps, ...d});
+  }
 
-  let best = {};
+  let best = {}, pilot = "";
+  try { pilot = localStorage.getItem("moonpilot.name") || ""; } catch (e) {}
   try { best = JSON.parse(localStorage.getItem("moonpilot.best") || "{}"); } catch (e) {}
   const saveBest = () => { try { localStorage.setItem("moonpilot.best", JSON.stringify(best)); } catch (e) {} };
 
@@ -27,6 +35,7 @@
     const parts = [["Mission complete", 1000], ["Fuel left (" + Math.round(r.fuel * 100) + "%)", Math.round(1000 * r.fuel)]];
     if (m.goal === "land") parts.push(["Soft touchdown", Math.round(500 * (1 - Math.min(1, r.sev)))]);
     parts.push(["Speed", Math.round(300 * P.clamp(1.5 - r.t / m.par, 0, 1))]);
+    if (r.noCoach) parts.push(["Flown without the coach", Math.round(.15 * parts.reduce((a, p) => a + p[1], 0))]);
     return {total: parts.reduce((a, p) => a + p[1], 0), parts};
   }
   const aiScore = m => score(m, m.ai).total;
@@ -37,9 +46,11 @@
   function menu() {
     state = "menu"; ["hud", "top", "pad", "brief", "result", "coach", "map", "land", "aimark"].forEach(id => show(id, false)); show("menu", true); audio(0);
     $("cards").innerHTML = "";
+    const flown = MISSIONS.filter(m => best[m.id]);
+    $("stats").textContent = flown.length ? `${flown.length} of ${MISSIONS.length} flown · total score ${flown.reduce((a, m) => a + best[m.id], 0)}` : "No flights yet. Start with Final Descent.";
     MISSIONS.forEach((m, i) => {
-      const b = document.createElement("button"); b.className = "card";
-      b.innerHTML = `<b>${i + 1}. ${m.name}</b><span>${best[m.id] ? "Your best " + best[m.id] : "Not flown yet"} · ` +
+      const b = document.createElement("button"); b.className = m.daily ? "card daily" : "card"; b.style.animationDelay = (.3 + i * .07) + "s";
+      b.innerHTML = `<b>${m.daily ? "" : MISSIONS.filter(x => !x.daily).indexOf(m) + 1 + ". "}${m.name}</b><span>${best[m.id] ? "Your best " + best[m.id] : "Not flown yet"} · ` +
         (m.ai.ok ? `<span class="ai">AI ${aiScore(m)}</span>` : `<span class="ai">AI failed this one</span>`) + `</span>`;
       b.onclick = () => brief(i); $("cards").appendChild(b);
     });
@@ -56,12 +67,14 @@
 
   // ---- flight ----
   let state = "menu", mi = 0, S = null, Q = null, gi = 0, endTimer = 0, last = performance.now();
-  const ctl = {thr: 0, pitch: 0, yaw: 0, hold: "up", warp: 1}, keys = {}, WARPS = [1, 2, 4, 10, 25, 100];
+  const ctl = {thr: 0, pitch: 0, yaw: 0, hold: "up", warp: 1}, keys = {}, WARPS = [1, 2, 4, 10, 25, 50, 100];
+  function addWarp(x) { x = Math.round(P.clamp(+x || 0, 0, 100)); if (x >= 1 && !WARPS.includes(x)) { WARPS.push(x); WARPS.sort((a, b) => a - b); } return x >= 1 ? x : 0; }
+  try { JSON.parse(localStorage.getItem("moonpilot.warps") || "[]").forEach(addWarp); } catch (e) {}
   function start() {
     const m = MISSIONS[mi];
-    S = P.create(m.start); Q = P.derive(S); gi = 0; endTimer = 0; lastTip = null; legs = m.start.onPad ? 1 : 0; gear = null; fxEvent = null; paused = false; pts = []; lastPt = -1e9;
+    S = P.create(m.start); Q = P.derive(S); gi = 0; endTimer = 0; lastTip = null; coachUsed = false; legs = m.start.onPad ? 1 : 0; gear = null; fxEvent = null; paused = false; pts = []; lastPt = -1e9; tel = []; telAt = -1e9; rec = []; recAt = -1e9;
     Object.assign(ctl, {thr: 0, pitch: 0, yaw: 0, warp: 1, hold: m.start.phase === P.DESCENT ? "retro" : "up"});
-    World.setMission(m.start, m.rows);
+    World.setMission(m.start, m.rows); $("confetti").innerHTML = "";
     ["menu", "brief", "result"].forEach(id => show(id, false)); ["hud", "top", "pad"].forEach(id => show(id, true));
     $("mname").textContent = m.name; state = "fly"; toast(m.goal === "orbit" ? "Throttle up to lift off" : "Good luck");
   }
@@ -97,11 +110,12 @@
   function frame(now) { requestAnimationFrame(frame); tick(now); }
   function tick(now) {
     const real = Math.max(0, Math.min(.05, (now - last) / 1000)); last = now;
+    if (state === "menu") return World.attract(now / 1000);
     if (state !== "fly" && state !== "ending") return;
     const m = MISSIONS[mi];
     if (state === "fly" && !paused) {
       input(real);
-      const maxWarp = ctl.thr > 0 || Q.h < 3000 ? 4 : 100;        // high warp only while coasting, well above ground
+      const maxWarp = S.phase === P.DESCENT && Q.h < 1000 ? 10 : 100;   // full range except on final approach
       if (ctl.warp > maxWarp) ctl.warp = maxWarp;
       let left = real * ctl.warp;
       const sub = ctl.thr > 0 || Q.h < 3000 ? .05 * Math.min(ctl.warp, 2) : Math.min(2, .05 * ctl.warp);
@@ -116,11 +130,11 @@
     } else if (state === "ending" && (endTimer -= real) <= 0) return results();
     const g = ghostAt(m, S.t);
     World.update(S, Q, g, {dt: paused ? 0 : real, legs, event: fxEvent}); fxEvent = null;
-    overlay(m, g, paused ? 0 : real); hud(m, g); audio(state === "fly" && !paused ? S.thr : 0);
+    overlay(m, g, paused ? 0 : real); hud(m, g); audio(state === "fly" && !paused ? S.thr : 0); if (state === "fly") warnings();
   }
 
   // ---- flight coach: one plain instruction for the current moment ----
-  let coachOn = true, lastTip = null;
+  let coachOn = true, lastTip = null, coachUsed = false;
   try { coachOn = localStorage.getItem("moonpilot.coach") !== "off"; } catch (e) {}
   const landingSpeed = h => h < 2000 ? Math.max(1.5, h / 10) : .9 * Math.sqrt(5 * h);     // safe speed for a height
   function climbTilt() {                                    // tilt that holds a steady climb to 20 km while building speed
@@ -149,6 +163,7 @@
 
   function hud(m, g) {
     const tip = coachOn && state === "fly" ? advice() : "";
+    if (tip) coachUsed = true;
     if (tip !== lastTip) { $("coach").textContent = lastTip = tip; show("coach", !!tip); }
     const low = S.phase === P.DESCENT && Q.h < 300;
     $("goal").textContent = m.goal === "orbit" || S.phase === P.ASCENT ? "Reach orbit: low point above 10 km"
@@ -165,11 +180,15 @@
   }
 
   // ---- landing legs, AI marker, landing instruments, map ----
-  let legs = 1, gear = null, fxEvent = null, paused = false, mapMode = "2d", pts = [], lastPt = -1e9, frameNo = 0;
+  let legs = 1, gear = null, fxEvent = null, paused = false, mapMode = "2d", pts = [], lastPt = -1e9, frameNo = 0, tel = [], telAt = -1e9, rec = [], recAt = -1e9, sharing = false;
   try { mapMode = localStorage.getItem("moonpilot.map") || "2d"; } catch (e) {}
   const landC = $("land").getContext("2d"), mapC = $("map2d").getContext("2d");
   function overlay(m, g, real) {
     const flying = state === "fly";
+    if (sharing && flying && S.t - recAt >= (Q.h < 3000 ? 1 : 2)) {   // state and controls, only when the player shares flights
+      rec.push([+S.t.toFixed(1), ...S.r.map(x => +x.toFixed(1)), ...S.v.map(x => +x.toFixed(2)), ...S.d.map(x => +x.toFixed(3)), +S.thr.toFixed(2), Math.round(S.m)]); recAt = S.t;
+    }
+    if (S.t - telAt >= (Q.h < 3000 ? .5 : 2) || !flying && telAt < S.t) { tel.push([+S.t.toFixed(2), +Q.h.toFixed(1), +Math.hypot(Q.vr, Q.vh).toFixed(2), +Q.vr.toFixed(2), +S.thr.toFixed(2), +Q.fuel.toFixed(4)]); telAt = S.t; }
     // legs come down on the pad and for landing, fold away in flight (G overrides)
     const want = gear !== null ? gear : (S.onPad || (S.phase === P.DESCENT && Q.h < 1500) || (S.phase === P.ASCENT && Q.h < 60)) ? 1 : 0;
     legs += P.clamp(want - legs, -real / 1.1, real / 1.1);
@@ -236,14 +255,67 @@
     c.fillStyle = "#8fa0b8"; c.font = "9px system-ui"; c.fillText("You: white   AI: blue   height x10", 6, 194);
   }
 
+  // ---- telemetry: recorded during the flight, drawn on the result screen, saved on request ----
+  function drawChart(m) {
+    const c = $("chart").getContext("2d"), W = 520, H = 180, L = 46, B = 22, T = 14, Rt = 50;
+    c.setTransform(2, 0, 0, 2, 0, 0); c.clearRect(0, 0, W, H); c.fillStyle = "rgba(8,12,20,.92)"; c.fillRect(0, 0, W, H);
+    if (tel.length < 2) return;
+    const tMax = Math.max(tel[tel.length - 1][0], 1), ai = m.rows.filter(r => r[0] <= tMax);
+    const hMax = Math.max(1, ...tel.map(p => p[1]), ...ai.map(r => r[9])), vMax = Math.max(1, ...tel.map(p => p[2]));
+    const X = t => L + (W - L - Rt) * t / tMax, Yh = h => H - B - (H - B - T) * Math.max(h, 0) / hMax, Yv = v => H - B - (H - B - T) * v / vMax;
+    const line = (pts, color, dash) => { c.strokeStyle = color; c.lineWidth = 1.6; c.setLineDash(dash || []); c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.stroke(); c.setLineDash([]); };
+    c.font = "10px system-ui"; c.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = T + (H - B - T) * i / 4;
+      c.strokeStyle = "#1f2a3d"; c.beginPath(); c.moveTo(L, y); c.lineTo(W - Rt, y); c.stroke();
+      c.fillStyle = "#ffb454"; c.textAlign = "right"; c.fillText(dist(hMax * (1 - i / 4)), L - 5, y + 3);
+      c.fillStyle = "#e6edf7"; c.textAlign = "left"; c.fillText((vMax * (1 - i / 4)).toFixed(0) + " m/s", W - Rt + 5, y + 3);
+    }
+    c.fillStyle = "#8fa0b8"; c.textAlign = "left"; c.fillText("0:00", L, H - 6); c.textAlign = "right"; c.fillText(clock(tMax), W - Rt, H - 6);
+    c.textAlign = "center"; c.fillText("height: you (orange), AI (blue dashes)   speed: white", (L + W - Rt) / 2, H - 6); c.textAlign = "left";
+    line(ai.map(r => [X(r[0]), Yh(r[9])]), "#59c2ff", [4, 3]);
+    line(tel.map(p => [X(p[0]), Yh(p[1])]), "#ffb454");
+    line(tel.map(p => [X(p[0]), Yv(p[2])]), "#e6edf7");
+  }
+  function download(name, href) { const a = document.createElement("a"); a.download = name; a.href = href; document.body.appendChild(a); a.click(); a.remove(); }
+
+  function celebrate() {                                    // you beat the AI: fanfare and confetti
+    beep(523, .18, .09); beep(659, .18, .09, "sine", .16); beep(784, .22, .09, "sine", .32); beep(1047, .55, .1, "sine", .5);
+    const box = $("confetti"); box.innerHTML = "";
+    for (let i = 0; i < 110; i++) {
+      const s = document.createElement("i");
+      s.style.cssText = `left:${Math.random() * 100}%;background:${["#ffb454", "#59c2ff", "#e6edf7", "#7fe38b"][i % 4]};animation-delay:${Math.random() * .9}s;animation-duration:${2.2 + Math.random() * 1.8}s`;
+      box.appendChild(s);
+    }
+    setTimeout(() => { box.innerHTML = ""; }, 5200);
+  }
+
+  // ---- worldwide leaderboard ----
+  const esc = s => String(s).replace(/[<>&"']/g, "");
+  function board(which) {
+    show("board", true);
+    $("btabs").innerHTML = "";
+    [["overall", "Overall"], ...MISSIONS.map(m => [m.id, m.daily ? "Today" : m.name])].forEach(([id, label]) => {
+      const b = document.createElement("button"); b.textContent = label; b.className = id === which ? "on" : ""; b.onclick = () => board(id); $("btabs").appendChild(b);
+    });
+    $("bnote").textContent = which === "overall" ? "Average of each pilot's best score across the four main missions. Fly all four to appear here." : "Best score per pilot. A star means flown without the coach.";
+    $("btable").innerHTML = "<tr><td>Loading...</td></tr>";
+    (which === "overall" ? Backend.overall() : Backend.top(which)).then(rows => {
+      $("btable").innerHTML = !rows ? "<tr><td>Could not reach the leaderboard.</td></tr>" : !rows.length ? "<tr><td>No scores yet. Be the first.</td></tr>"
+        : rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}${r.coach === false ? " ★" : ""}</td><td>${r.score}</td></tr>`).join("");
+    });
+  }
+
   // ---- end of mission ----
   let outcome = null;
   function finish(ok) {
     const m = MISSIONS[mi];
     const progress = m.goal === "orbit" ? P.clamp(Math.abs(Q.vt) / 1650, 0, 1) : 1 - P.clamp(Math.hypot(Q.vr, Q.vh) / 200, 0, 1);
-    outcome = {ok, t: S.t, fuel: Q.fuel, sev: Q.sev, progress, why: S.outcome, vr: Q.vr, vh: Q.vh, tilt: Q.tilt / DEG};
+    outcome = {ok, t: S.t, fuel: Q.fuel, sev: Q.sev, progress, why: S.outcome, vr: Q.vr, vh: Q.vh, tilt: Q.tilt / DEG, noCoach: !coachUsed};
     fxEvent = ok && m.goal === "land" ? "landed" : S.outcome === "crashed" ? "crashed" : null;
-    if (fxEvent === "landed") toast("Touchdown!");
+    if (fxEvent === "landed") { toast("Touchdown!"); burst(.4, .5, 320); beep(70, .3, .2); }
+    else if (fxEvent === "crashed") burst(1.8, .9, 1800);
+    else if (ok) { beep(660, .15); beep(880, .3, .08, "sine", .15); }
     state = "ending"; endTimer = fxEvent ? 2.8 : 1.4; ctl.thr = 0; S.thr = 0;
   }
   function results() {
@@ -260,12 +332,46 @@
       `<tr><td><b>Your score</b></td><td><b>${sc.total}</b></td></tr>` +
       `<tr class="ai"><td>AI score</td><td>${m.ai.ok ? ai : "failed"}</td></tr>` +
       `<tr><td>Result</td><td>${!o.ok ? "Try again" : stars === 3 ? "You beat the AI" : "The AI still leads"}</td></tr>`;
+    shareText = `${pilot ? pilot + " flew " : ""}Moon Pilot - ${m.name}: ${sc.total} ${"★".repeat(stars)}${m.ai.ok ? " (the AI scored " + ai + ")" : ""}. Can you beat it?`;
     if (sc.total > (best[m.id] || 0)) { best[m.id] = sc.total; saveBest(); }
-    show("next", mi < MISSIONS.length - 1);
+    $("rpost").textContent = !o.ok ? "" : pilot ? "Posting your score..." : "Add a pilot name on the home screen to join the worldwide leaderboard.";
+    if (o.ok && pilot) Backend.score({name: pilot, mission: m.id, score: sc.total, ok: true, seconds: +o.t.toFixed(1), fuel: +P.clamp(o.fuel, 0, 1).toFixed(4), coach: !o.noCoach})
+      .then(done => { $("rpost").textContent = done ? `Posted to the leaderboard as ${pilot}.` : "Could not reach the leaderboard. Your score is saved on this device."; });
+    if (sharing && rec.length > 5) {                        // the player opted in: send the flight for AI training
+      let rows = rec; while (rows.length > 2000) rows = rows.filter((_, i) => i % 2 === 0);
+      Backend.flight({mission: m.id, ok: o.ok, score: sc.total, rows});
+    }
+    show("next", mi < MISSIONS.length - 1); drawChart(m);
+    const beat = o.ok && m.ai.ok && sc.total > ai, last = m.rows[m.rows.length - 1];
+    const row = (k, a, b) => `<tr><td>${k}</td><td>${a}</td><td class="ai">${b}</td></tr>`;
+    $("cmp").innerHTML = `<tr><th></th><th>You</th><th class="ai">AI</th></tr>` + row("Score", sc.total, m.ai.ok ? ai : "failed") + row("Time", clock(o.t), clock(m.ai.t)) +
+      row("Fuel left", Math.round(o.fuel * 100) + "%", Math.round(m.ai.fuel * 100) + "%") +
+      (m.goal === "land" ? row("Touchdown speed", Math.abs(o.vr).toFixed(1) + " m/s", Math.abs(last[10]).toFixed(1) + " m/s") + row("Sideways speed", o.vh.toFixed(1) + " m/s", last[11].toFixed(1) + " m/s") : "");
+    show("cmp", false); $("result").classList.toggle("win", beat);
+    if (beat) { $("rtitle").textContent = "You beat the AI!"; celebrate(); }
   }
 
   // ---- engine sound, synthesised (no audio files) ----
-  let ac = null, gain = null;
+  let ac = null, gain = null, noise = null, warnAt = 0, shareText = "";
+  function beep(freq, dur, vol = .08, type = "sine", when = 0) {
+    if (!ac) return;
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + when;
+    o.type = type; o.frequency.value = freq; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur);
+  }
+  function burst(dur, vol, cutoff) {                        // filtered noise: a thud or an explosion
+    if (!ac) return;
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(), t = ac.currentTime;
+    s.buffer = noise; f.type = "lowpass"; f.frequency.setValueAtTime(cutoff, t); f.frequency.exponentialRampToValueAtTime(60, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(ac.destination); s.start(t); s.stop(t + dur);
+  }
+  function warnings() {                                     // sink-rate alarm near the ground, and a low-fuel chirp
+    const now = performance.now();
+    if (now < warnAt || paused) return;
+    if (S.phase === P.DESCENT && Q.h < 250 && Q.vr < -Math.max(3, Q.h / 8)) { beep(880, .12, .07, "square"); warnAt = now + 450; }
+    else if (Q.fuel < .08 && Q.fuel > 0) { beep(440, .1, .06); beep(440, .1, .06, "sine", .16); warnAt = now + 2200; }
+  }
   function audio(level) {
     if (!ac) return;
     gain.gain.setTargetAtTime(level * .22, ac.currentTime, .08);
@@ -274,7 +380,7 @@
     if (ac) return;
     try {
       ac = new (window.AudioContext || window.webkitAudioContext)();
-      const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), d = buf.getChannelData(0);
+      const buf = noise = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), d = buf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       const src = ac.createBufferSource(), lp = ac.createBiquadFilter(); src.buffer = buf; src.loop = true;
       lp.type = "lowpass"; lp.frequency.value = 420; gain = ac.createGain(); gain.gain.value = 0;
@@ -300,7 +406,7 @@
   document.querySelectorAll("[data-hold]").forEach(b => { b.onclick = () => setHold(b.dataset.hold); });
   $("thr").oninput = e => { ctl.thr = e.target.value / 100; };
   $("warpup").onclick = () => warp(1); $("warpdn").onclick = () => warp(-1);
-  $("coachb").onclick = () => { coachOn = !coachOn; $("coachb").classList.toggle("on", coachOn); try { localStorage.setItem("moonpilot.coach", coachOn ? "on" : "off"); } catch (e) {} };
+  $("coachb").onclick = () => { coachOn = !coachOn; toast(coachOn ? "Coach on" : "Coach off: finish without it for 15% extra score"); $("coachb").classList.toggle("on", coachOn); try { localStorage.setItem("moonpilot.coach", coachOn ? "on" : "off"); } catch (e) {} };
   $("coachb").classList.toggle("on", coachOn);
   $("camb").onclick = () => { World.cam.mode = World.cam.mode === "follow" ? "whole" : "follow"; };
   const cycleMap = () => { mapMode = {"2d": "3d", "3d": "off", "off": "2d"}[mapMode]; $("mapb").textContent = "Map " + mapMode.toUpperCase(); try { localStorage.setItem("moonpilot.map", mapMode); } catch (e) {} };
@@ -309,6 +415,27 @@
   $("go").onclick = () => { initAudio(); start(); };
   $("quit").onclick = $("tomenu").onclick = $("back").onclick = menu;
   $("next").onclick = () => brief(mi + 1);
+  $("savepng").onclick = () => download(`moon-pilot-${MISSIONS[mi].id}.png`, $("chart").toDataURL("image/png"));
+  $("savejson").onclick = () => download(`moon-pilot-${MISSIONS[mi].id}.json`, URL.createObjectURL(new Blob([JSON.stringify({
+    game: "Moon Pilot", mission: MISSIONS[mi].name, pilot, outcome, columns: ["time_s", "height_m", "speed_m_s", "vertical_speed_m_s", "throttle", "fuel"], rows: tel})], {type: "application/json"})));
+  $("warp").onclick = () => {                               // your own time-warp speed, remembered on this device
+    const x = addWarp(prompt("Simulation speed, from 1 to 100 times:", ctl.warp));
+    if (!x) return;
+    ctl.warp = x;
+    try { localStorage.setItem("moonpilot.warps", JSON.stringify(WARPS.filter(w => ![1, 2, 4, 10, 25, 50, 100].includes(w)))); } catch (e) {}
+  };
+  $("cmpb").onclick = () => $("cmp").classList.toggle("hide");
+  $("boardb").onclick = () => board("overall"); $("rboard").onclick = () => board(MISSIONS[mi].id); $("bclose").onclick = () => show("board", false);
+  try { sharing = localStorage.getItem("moonpilot.share") === "yes"; } catch (e) {}
+  $("sharef").checked = sharing;
+  $("sharef").onchange = e => { sharing = e.target.checked; try { localStorage.setItem("moonpilot.share", sharing ? "yes" : "no"); } catch (err) {} };
+  $("pname").value = pilot;
+  $("pname").oninput = e => { pilot = e.target.value.replace(/[<>&"']/g, "").trim().slice(0, 16); try { localStorage.setItem("moonpilot.name", pilot); } catch (err) {} };
+  $("share").onclick = () => {
+    const url = location.origin + location.pathname, done = () => { $("share").textContent = "Copied"; setTimeout(() => { $("share").textContent = "Share"; }, 1500); };
+    if (navigator.share) navigator.share({title: "Moon Pilot", text: shareText, url}).catch(() => {});
+    else if (navigator.clipboard) navigator.clipboard.writeText(shareText + " " + url).then(done).catch(() => {});
+  };
   menu(); requestAnimationFrame(frame);
   window.MoonPilot = {get state() { return {state, t: S && S.t, h: Q && Q.h, vr: Q && Q.vr, vh: Q && Q.vh, peri: Q && Q.peri, apo: Q && Q.apo, phase: S && S.phase, outcome}; }, get S() { return S; }, get Q() { return Q; }, ctl, keys, tick};   // for testing
 })();
