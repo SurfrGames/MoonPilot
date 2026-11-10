@@ -2,16 +2,16 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "moon-pilot",
+      "name": "moon-pilot-game",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8766", "--bind", "127.0.0.1", "--directory", "moon-pilot/www"],
-      "port": 8766
+      "runtimeArgs": ["-m", "http.server", "8767", "--bind", "127.0.0.1", "--directory", "C:/MoonPilot/moon-pilot/www"],
+      "port": 8767
     },
     {
       "name": "orbit3d-viewer",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", "rocket-lander"],
-      "port": 8765
+      "runtimeArgs": ["-m", "http.server", "8768", "--bind", "127.0.0.1", "--directory", "C:/MoonPilot/rocket-lander"],
+      "port": 8768
     }
   ]
 }
