@@ -17,6 +17,7 @@ All rockets are simulated at once in NumPy, which is what makes laptop training 
 import argparse
 import json
 import math
+import os
 import time
 from pathlib import Path
 
@@ -25,10 +26,17 @@ from gymnasium import spaces
 from stable_baselines3.common.vec_env import VecEnv
 
 ROOT = Path(__file__).parent
-MODEL, MISSIONS = ROOT / "models" / "orbit3d", ROOT / "models" / "orbit3d_missions.json"
+BODY = os.environ.get("ORBIT3D_BODY", "moon")           # which world to train or export: moon, europa, ceres
+TAG = "" if BODY == "moon" else "-" + BODY
+MODEL, MISSIONS = ROOT / "models" / f"orbit3d{TAG}", ROOT / "models" / f"orbit3d{TAG}_missions.json"
 
 # --- the world -------------------------------------------------------------------------
-MU, R_MOON, OMEGA = 4.9048695e12, 1.7374e6, 2.6617e-6   # gravity GM, radius, spin (rad/s)
+BODIES = {  # gravity GM (m^3/s^2), radius (m), spin (rad/s)
+    "moon": (4.9048695e12, 1.7374e6, 2.6617e-6),
+    "europa": (3.2027e12, 1.5608e6, 2.0478e-5),
+    "ceres": (6.2628e10, 4.697e5, 1.9234e-4),
+}
+MU, R_MOON, OMEGA = BODIES[BODY]                         # R_MOON is the radius of whichever body is chosen
 W = np.array([0.0, 0.0, OMEGA])
 G0, ISP, THRUST = 9.80665, 311.0, 45_000.0              # Apollo-class descent engine
 M_WET, M_DRY = 15_000.0, 2_700.0                        # ~5.2 km/s of delta-v
@@ -42,7 +50,13 @@ PERI_MIN, APO_MAX, PLANE_TOL = 10e3, 100e3, math.radians(2)   # what counts as "
 R_T = R_MOON + H_T
 EPS_0, EPS_T, HANG_T = -MU / R_MOON, -MU / (2 * R_T), math.sqrt(MU * R_T)
 U_T = math.sqrt(2 * (EPS_T - EPS_0))                    # target orbit energy, written as a speed
-V_REF = 1750.0
+# Scale factors relative to the Moon (all exactly 1 there), so one set of tuned numbers serves every world.
+_MM, _MR = BODIES["moon"][:2]
+VS = math.sqrt(MU / R_T) / math.sqrt(_MM / (_MR + H_T))            # orbital speed
+GS = math.sqrt((MU / R_MOON**2) / (_MM / _MR**2))                  # square root of surface gravity
+MS = math.exp(-1.12 * (VS - 1) * math.sqrt(_MM / (_MR + H_T)) / (ISP * G0))   # mass left on reaching orbit
+COAST_DT = 20.0 * max(1.0, TAU * math.sqrt(R_T**3 / MU) / 6800)    # coasting step: about 340 steps per orbit
+V_REF = 1750.0 * VS
 ASCENT, COAST, DESCENT = 0, 1, 2
 MAX_STEPS = np.array([500, 450, 900])
 STEP_COST = np.array([0.02, 0.0, 0.03])                 # a small fee per step, so waiting costs
@@ -124,16 +138,16 @@ class Orbit3D(VecEnv):
         mid = kind == 3
         h = np.where(mid, U(2e3, 30e3), np.exp(U(math.log(20), math.log(2000))))
         s = np.sqrt(h)
-        vt = np.where(mid, U(0.2, 1) * np.minimum(1700, 12 * s), U(-1.5, 1.5) * s)
-        vc = np.where(mid, U(-0.1, 0.1) * vt, U(-1.5, 1.5) * s)
-        vr = U(-1, 0.25) * np.where(mid, 2.0, 1.5) * s
+        vt = np.where(mid, U(0.2, 1) * np.minimum(1700 * VS, 12 * s * GS), U(-1.5, 1.5) * s * GS)
+        vc = np.where(mid, U(-0.1, 0.1) * vt, U(-1.5, 1.5) * s * GS)
+        vr = U(-1, 0.25) * np.where(mid, 2.0, 1.5) * s * GS
         r_d = (R_MOON + h)[:, None] * er
         vrel = vr[:, None] * er + vt[:, None] * et + vc[:, None] * nrm
         # 5: part-way up (mid ascent), anywhere from just off the pad to almost orbital speed
         ha, fr = U(1e3, 40e3), U(0.15, 1.0)
         r_a = (R_MOON + ha)[:, None] * er
-        v_a = (U(-0.1, 1) * 120 * (1 - 0.7 * fr))[:, None] * er + (fr * 1650)[:, None] * et + U(-10, 10)[:, None] * nrm
-        m_a = M_WET * np.exp(-(1.1 * fr * 1650 + 1.3 * np.sqrt(3.24 * ha)) / (ISP * G0))   # fuel a real climb would have used
+        v_a = (U(-0.1, 1) * 120 * GS * (1 - 0.7 * fr))[:, None] * er + (fr * 1650 * VS)[:, None] * et + U(-10, 10)[:, None] * nrm
+        m_a = M_WET * np.exp(-(1.1 * fr * 1650 * VS + 1.3 * GS * np.sqrt(3.24 * ha)) / (ISP * G0))   # fuel a real climb would have used
         orb, des, asc = ((kind == 1) | (kind == 2))[:, None], ((kind == 3) | (kind == 4))[:, None], (kind == 5)[:, None]
         rnd = lambda: g.normal(size=(k, 3))
         self.r[i] = np.where(orb, r_o, np.where(des, r_d, np.where(asc, r_a, r)))
@@ -141,7 +155,7 @@ class Orbit3D(VecEnv):
         self.d[i] = unit(np.select([(kind == j)[:, None] for j in (1, 2, 3, 4, 5)],
                                    [et, rnd(), -vrel, er + 0.3 * rnd(), et + (1 - fr)[:, None] * er], d))
         self.m[i] = np.select([kind == 1, kind == 2, kind == 3, kind == 4, kind == 5],
-                              [U(6500, 8500), U(6000, 8500), U(4000, 7500), U(3500, 6500), m_a], M_WET)
+                              [U(6500, 8500) * MS, U(6000, 8500) * MS, U(4000, 7500) * MS, U(3500, 6500) * MS, m_a], M_WET)
         self.nrm[i] = unit(nrm + np.select([kind == 0, kind == 5], [0.0, 0.005], 0.015)[:, None] * rnd())
         self.phase[i] = np.select([kind == 1, (kind >= 2) & (kind <= 4)], [COAST, DESCENT], ASCENT)
         self.theta[i] = np.where(kind == 1, U(0, 0.97) * TAU, np.where((kind >= 2) & (kind <= 4), TAU, 0.0))
@@ -211,7 +225,7 @@ class Orbit3D(VecEnv):
         ph = self.phase.copy()
         thr = np.clip(a[:, 0], 0, 1)                            # action 0: throttle (<= 0 is engine off)
         # time step: 2 s normally, 1 s on final approach, 20 s while coasting in orbit
-        dt = np.where((ph == COAST) & (thr == 0), 20.0, np.where((ph == DESCENT) & (c["h"] < 2000), 1.0, 2.0))
+        dt = np.where((ph == COAST) & (thr == 0), COAST_DT, np.where((ph == DESCENT) & (c["h"] < 2000), 1.0, 2.0))
         thr = np.minimum(thr, np.maximum(self.m - M_DRY, 0) / (MDOT * dt))
         # actions 1-3: where to point, in the local up / prograde / cross-track frame, turn-rate limited
         cmd = a[:, 1:2] * c["er"] + a[:, 2:3] * c["et"] + a[:, 3:4] * c["ec"]
@@ -390,10 +404,16 @@ def export(model, game=ROOT.parent / "moon-pilot"):
         print(f"{name:8s} {ai['text']}")
         if name == "deorbit":
             parity = {"start": start, "ctl": ctl, "end": rows[-1][1:4]}
-    out["daily"] = dailies(model)
-    print(f"daily    {len(out['daily'])} challenges")
-    (game / "www" / "data" / "ghosts.js").write_text("window.GHOSTS=" + json.dumps(out, separators=(",", ":")) + ";")
-    (game / "tools" / "parity.json").write_text(json.dumps(parity))
+    if BODY == "moon":
+        out["daily"] = dailies(model)
+        print(f"daily    {len(out['daily'])} challenges")
+        (game / "www" / "data" / "ghosts.js").write_text("window.GHOSTS=" + json.dumps(out, separators=(",", ":")) + ";")
+        (game / "tools" / "parity.json").write_text(json.dumps(parity))
+    else:                                                   # another world: its own data file, with the body's constants
+        out["body"] = {"id": BODY, "mu": MU, "r": R_MOON, "omega": OMEGA}
+        (game / "www" / "data" / f"ghosts-{BODY}.js").write_text(
+            f"(window.GHOSTS.worlds=window.GHOSTS.worlds||{{}}).{BODY}=" + json.dumps(out, separators=(",", ":")) + ";")
+        (game / "tools" / f"parity-{BODY}.json").write_text(json.dumps(parity | {"body": out["body"]}))
 
 
 def train(steps, n_envs, seed):
@@ -435,7 +455,8 @@ def train(steps, n_envs, seed):
     model.save(MODEL)
     missions.append({"label": "100% trained"} | fly(model))
     MISSIONS.write_text(json.dumps(missions, separators=(",", ":")))
-    build_viewer(missions)
+    if BODY == "moon":
+        build_viewer(missions)
     evaluate(model)
 
 
