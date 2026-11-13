@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Moon Pilot</title>
+<meta name="description" content="Fly a real-physics Moon rocket and race an AI that taught itself to land.">
+<meta name="theme-color" content="#05070c">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
@@ -47,6 +50,11 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#1a1205
 .pilot input:focus{border-color:var(--accent)}
 .sharef{display:flex;gap:8px;align-items:flex-start;margin-top:12px;color:var(--dim);font-size:13px;cursor:pointer}.sharef input{margin-top:3px;accent-color:var(--accent)}.sharef small{display:block;opacity:.8}
 #btable td:first-child{width:34px;color:var(--dim)}#btabs button{padding:6px 10px;font-size:13px}#board{z-index:6}
+.rank{margin-top:14px}.rank b{color:var(--text)}.rank i{display:block;height:6px;background:#172235;border-radius:3px;overflow:hidden;margin-top:6px}
+.rank u{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#ffe2b0);border-radius:3px;transition:width .8s}
+.streak{color:var(--accent);font-size:13px;margin-top:6px}.xp{color:var(--good);font-weight:600;margin:-6px 0 8px}
+.ach{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-top:6px;opacity:.42}
+.ach.got{opacity:1;border-color:var(--accent)}.ach span{color:var(--dim);font-size:13px;text-align:right}#achs{z-index:6}
 .stats{margin-top:14px;color:var(--dim);font-size:13px}
 .home .card{position:relative;background:rgba(14,21,33,.72);backdrop-filter:blur(8px);border-color:var(--line);padding:14px 16px 14px 20px;margin-top:10px;transition:transform .18s,border-color .18s,background .18s}
 .home .card::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:2px;background:var(--line);transition:background .18s}
@@ -126,9 +134,11 @@ kbd{border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px ui-mo
     <h1 class="title">MOON <b>PILOT</b></h1>
     <p class="tag">Fly a real-physics Moon rocket. A neural network taught itself these missions and <span class="ai">its ghost flies beside you</span>. Beat it.</p>
     <label class="pilot">Pilot name<input id="pname" maxlength="16" placeholder="Your call sign" autocomplete="off" spellcheck="false"></label>
-    <label class="sharef"><input type="checkbox" id="sharef"> Share my flights to help train the AI <small>(flight path and controls only, no personal data)</small></label>
+    <div class="rank"><div class="row"><b id="rname"></b><span id="rxp"></span></div><i><u id="rbar"></u></i><div id="streak" class="streak"></div></div>
+    <label class="sharef"><input type="checkbox" id="sharef"><span>Share my flights to help train the AI <small>(flight path and controls only, no personal data)</small></span></label>
+    <label class="sharef"><input type="checkbox" id="telf"><span>Record flight graphs <small>(height and speed chart after each flight)</small></span></label>
     <div id="stats" class="stats"></div>
-    <div class="btns"><button id="boardb">Worldwide leaderboard</button></div>
+    <div class="btns"><button id="boardb">Worldwide leaderboard</button><button id="achb">Achievements</button></div>
   </div>
   <div id="cards" class="cards"></div>
 </div>
@@ -146,6 +156,7 @@ kbd{border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px ui-mo
     <h2 id="rtitle"></h2>
     <div class="stars" id="rstars"></div>
     <div id="rtext" class="sub"></div>
+    <div id="rxpline" class="xp"></div>
     <table id="rtable"></table>
     <canvas id="chart" width="1040" height="360"></canvas>
     <table id="cmp" class="hide"></table>
@@ -162,6 +173,13 @@ kbd{border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px ui-mo
     <div class="btns"><button id="bclose" class="primary">Close</button></div>
   </div>
 </div>
+<div id="achs" class="screen hide">
+  <div class="panel">
+    <h2>Achievements</h2>
+    <div id="achlist"></div>
+    <div class="btns"><button id="achclose" class="primary">Close</button></div>
+  </div>
+</div>
 <div id="confetti"></div>
 <script src="lib/three.min.js"></script>
 <script src="data/ghosts.js"></script>
@@ -169,5 +187,6 @@ kbd{border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px ui-mo
 <script src="js/world.js"></script>
 <script src="js/backend.js"></script>
 <script src="js/game.js"></script>
+<script>if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 </body>
 </html>

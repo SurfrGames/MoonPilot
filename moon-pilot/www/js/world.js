@@ -77,10 +77,16 @@ const World = (() => {
 
   // ---- Moon, stars, sun glare, Earth ----
   const moon = new THREE.Group(); scene.add(moon);
-  const moonTex = tex(4096, 2048, sphereGround);
+  const moonTex = tex(8, 4, g => { g.fillStyle = "#77777a"; g.fillRect(0, 0, 8, 4); });   // stand-in until the photo map arrives
   const ball = new THREE.Mesh(new THREE.SphereGeometry(R, 256, 128),
     new THREE.MeshStandardMaterial({map: moonTex, bumpMap: moonTex, bumpScale: 2.2, roughness: 1, metalness: 0}));
   ball.rotation.x = Math.PI / 2; moon.add(ball);
+  {                                                          // the real Moon: NASA LRO colour map and height map (public domain)
+    const loader = new THREE.TextureLoader(), big = renderer.capabilities.maxTextureSize >= 4096 && Math.max(innerWidth, innerHeight) >= 900;
+    loader.load(big ? "img/moon.jpg" : "img/moon-2k.jpg", t => { t.anisotropy = 8; ball.material.map = t; ball.material.color.setScalar(1.75); ball.material.needsUpdate = true; }, undefined,   // the photo map is dark; lift it
+      () => { const t = tex(4096, 2048, sphereGround); ball.material.map = ball.material.bumpMap = t; ball.material.bumpScale = 2.2; ball.material.needsUpdate = true; });   // offline fallback: drawn Moon
+    loader.load("img/moon-height.jpg", t => { ball.material.bumpMap = t; ball.material.bumpScale = 42; ball.material.needsUpdate = true; });
+  }
   for (const [n, size, lo] of [[5000, 1.2, .35], [350, 2.3, .8]]) {
     const p = new Float32Array(n * 3), c = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
@@ -230,7 +236,7 @@ const World = (() => {
     [rocket, rocket.dot, ghost, ghost.dot, trail, ghostTrail, shadow, pad, scorch, orbit, fx, ...levels.map(L => L.mesh)].forEach(o => { if (o) o.visible = false; });
     const a = t * .03;
     moon.rotation.z = t * .012;
-    sun.position.set(Math.cos(a - .95), Math.sin(a - .95), .35).normalize(); glare.position.copy(sun.position).multiplyScalar(1.4e6); earth.position.set(-2.6e5, 2.4e5, 1.3e5);
+    sun.position.set(Math.cos(a - .55), Math.sin(a - .55), .3).normalize(); glare.position.copy(sun.position).multiplyScalar(1.4e6); earth.position.set(-2.6e5, 2.4e5, 1.3e5);
     camera.position.set(Math.cos(a) * 4300, Math.sin(a) * 4300, 900); camera.up.copy(Z);
     camera.lookAt(tgt.set(Math.sin(a) * 1100, -Math.cos(a) * 1100, 0));      // look to one side so the Moon sits on the right
     renderer.render(scene, camera);

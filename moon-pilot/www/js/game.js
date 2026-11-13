@@ -23,6 +23,21 @@
       brief: (high ? "Today's flight starts high and fast. Brake hard, then land softly." : "Today's flight starts low over the surface. Stop your drift and land softly.") + " A new challenge arrives every day.",
       steps: MISSIONS[0].steps, ...d});
   }
+  // Gauntlet: endless landings that get harder; no AI here, the run length is the score
+  if (MISSIONS.length && GHOSTS.descent) MISSIONS.push({id: "gauntlet", gauntlet: true, noGhost: true, name: "Gauntlet", goal: "land", par: 120,
+    brief: "Land again and again. Every landing starts higher, faster and with less fuel. One crash ends the run. How many can you chain?",
+    steps: ["Each round: brake, stop your drift, touch down under 3 m/s.", "Soft landings and spare fuel score more.", "Your best run goes on the worldwide leaderboard."],
+    start: GHOSTS.descent.start, rows: [[0, 0, 0, 0, 0, 0, 1, 0, 2, 0, 0, 0, 0]], ai: {ok: false, text: "", t: 0, fuel: 0, sev: 0}});
+  let gaunt = {round: 0, total: 0}, nextRound = false;
+  function gauntletStart(k) {
+    const b = GHOSTS.descent.start, er = P.unit(b.r), et = P.unit(P.cross(b.nrm, er)), ec = P.cross(er, et);
+    const rnd = (a, c) => a + Math.random() * (c - a), side = Math.random() < .5 ? -1 : 1;
+    const h = Math.min(3000, (350 + 220 * k) * rnd(.85, 1.15)), vr = -Math.min(60, (4 + 3.5 * k) * rnd(.8, 1.2));
+    const vt = side * Math.min(150, (6 + 9 * k) * rnd(.8, 1.2)), vc = Math.min(40, 3 * k) * rnd(-1, 1);
+    const r = P.mul(er, P.R + h), vrel = P.add(P.add(P.mul(er, vr), et, vt), ec, vc);
+    return {r, v: P.add(vrel, [-P.OMEGA * r[1], P.OMEGA * r[0], 0]), d: er, nrm: b.nrm, phase: P.DESCENT, theta: P.TAU, onPad: false,
+            m: P.M_DRY + (P.M_WET - P.M_DRY) * Math.max(.035, .2 - .014 * k) * rnd(.95, 1.05)};
+  }
 
   let best = {}, pilot = "";
   try { pilot = localStorage.getItem("moonpilot.name") || ""; } catch (e) {}
@@ -45,13 +60,13 @@
   // ---- menu ----
   function menu() {
     state = "menu"; ["hud", "top", "pad", "brief", "result", "coach", "map", "land", "aimark"].forEach(id => show(id, false)); show("menu", true); audio(0);
-    $("cards").innerHTML = "";
+    $("cards").innerHTML = ""; renderProfile();
     const flown = MISSIONS.filter(m => best[m.id]);
     $("stats").textContent = flown.length ? `${flown.length} of ${MISSIONS.length} flown · total score ${flown.reduce((a, m) => a + best[m.id], 0)}` : "No flights yet. Start with Final Descent.";
     MISSIONS.forEach((m, i) => {
       const b = document.createElement("button"); b.className = m.daily ? "card daily" : "card"; b.style.animationDelay = (.3 + i * .07) + "s";
-      b.innerHTML = `<b>${m.daily ? "" : MISSIONS.filter(x => !x.daily).indexOf(m) + 1 + ". "}${m.name}</b><span>${best[m.id] ? "Your best " + best[m.id] : "Not flown yet"} · ` +
-        (m.ai.ok ? `<span class="ai">AI ${aiScore(m)}</span>` : `<span class="ai">AI failed this one</span>`) + `</span>`;
+      b.innerHTML = `<b>${m.daily || m.gauntlet ? "" : MISSIONS.filter(x => !x.daily).indexOf(m) + 1 + ". "}${m.name}</b><span>${best[m.id] ? "Your best " + best[m.id] : "Not flown yet"} · ` +
+        (m.gauntlet ? `<span class="ai">endless</span>` : m.ai.ok ? `<span class="ai">AI ${aiScore(m)}</span>` : `<span class="ai">AI failed this one</span>`) + `</span>`;
       b.onclick = () => brief(i); $("cards").appendChild(b);
     });
     if (!MISSIONS.length) $("cards").textContent = "No missions found. Run the AI export first.";
@@ -61,7 +76,7 @@
     show("menu", false); show("result", false); show("brief", true);
     $("bname").textContent = m.name; $("btext").textContent = m.brief;
     $("bsteps").innerHTML = m.steps.map(t => `<li>${t}</li>`).join("");
-    $("bai").textContent = m.ai.ok ? `The AI scored ${aiScore(m)} in ${clock(m.ai.t)} with ${Math.round(m.ai.fuel * 100)}% fuel left.`
+    $("bai").textContent = m.gauntlet ? (best.gauntlet ? `Your best run scored ${best.gauntlet}.` : "No AI here: just you and the ground.") : m.ai.ok ? `The AI scored ${aiScore(m)} in ${clock(m.ai.t)} with ${Math.round(m.ai.fuel * 100)}% fuel left.`
                                    : `The AI did not manage this one (${m.ai.text.toLowerCase()}). Can you?`;
   }
 
@@ -70,8 +85,9 @@
   const ctl = {thr: 0, pitch: 0, yaw: 0, hold: "up", warp: 1}, keys = {}, WARPS = [1, 2, 4, 10, 25, 50, 100];
   function addWarp(x) { x = Math.round(P.clamp(+x || 0, 0, 100)); if (x >= 1 && !WARPS.includes(x)) { WARPS.push(x); WARPS.sort((a, b) => a - b); } return x >= 1 ? x : 0; }
   try { JSON.parse(localStorage.getItem("moonpilot.warps") || "[]").forEach(addWarp); } catch (e) {}
-  function start() {
+  function start(next) {
     const m = MISSIONS[mi];
+    if (m.gauntlet) { if (!next) gaunt = {round: 0, total: 0}; m.start = gauntletStart(gaunt.round); m.rows = [[0, ...m.start.r, ...m.start.d, 0, 2, 0, 0, 0, 0]]; }
     S = P.create(m.start); Q = P.derive(S); gi = 0; endTimer = 0; lastTip = null; coachUsed = false; legs = m.start.onPad ? 1 : 0; gear = null; fxEvent = null; paused = false; pts = []; lastPt = -1e9; tel = []; telAt = -1e9; rec = []; recAt = -1e9;
     Object.assign(ctl, {thr: 0, pitch: 0, yaw: 0, warp: 1, hold: m.start.phase === P.DESCENT ? "retro" : "up"});
     World.setMission(m.start, m.rows); $("confetti").innerHTML = "";
@@ -127,8 +143,8 @@
         else if (ev === "rev") { ctl.warp = 1; ctl.hold = "retro"; toast("One orbit flown. Now brake and land"); }
         else if (ev) finish(ev === "landed");
       }
-    } else if (state === "ending" && (endTimer -= real) <= 0) return results();
-    const g = ghostAt(m, S.t);
+    } else if (state === "ending" && (endTimer -= real) <= 0) { if (nextRound) { nextRound = false; return start(true); } return results(); }
+    const g = ghostAt(m, S.t); if (m.noGhost) g.visible = false;
     World.update(S, Q, g, {dt: paused ? 0 : real, legs, event: fxEvent}); fxEvent = null;
     overlay(m, g, paused ? 0 : real); hud(m, g); audio(state === "fly" && !paused ? S.thr : 0); if (state === "fly") warnings();
   }
@@ -166,7 +182,7 @@
     if (tip) coachUsed = true;
     if (tip !== lastTip) { $("coach").textContent = lastTip = tip; show("coach", !!tip); }
     const low = S.phase === P.DESCENT && Q.h < 300;
-    $("goal").textContent = m.goal === "orbit" || S.phase === P.ASCENT ? "Reach orbit: low point above 10 km"
+    $("goal").textContent = m.gauntlet ? `Landing ${gaunt.round + 1} · ${gaunt.total} pts` : m.goal === "orbit" || S.phase === P.ASCENT ? "Reach orbit: low point above 10 km"
       : S.phase === P.COAST ? `Coast one lap: ${Math.round(100 * S.theta / P.TAU)}%` : "Land softly";
     $("t").textContent = clock(S.t); $("h").textContent = dist(Math.max(0, Q.h));
     $("vr").textContent = (Q.vr > 0 ? "+" : "") + Q.vr.toFixed(1) + " m/s"; $("vr").className = low ? (Q.vr < -3 ? "warn" : "ok") : "";
@@ -174,13 +190,13 @@
     $("fuel").textContent = Math.round(Q.fuel * 100) + "%"; $("fuel").className = Q.fuel < .1 ? "warn" : "";
     $("orb").textContent = Q.apo > 1e7 ? "escape" : `${Math.max(Q.apo / 1000, 0).toFixed(0)} / ${Q.peri < 0 ? "ground" : (Q.peri / 1000).toFixed(0) + " km"}`;
     $("tilt").textContent = (Q.tilt / DEG).toFixed(0) + "°"; $("tilt").className = low ? (Q.tilt > 15 * DEG ? "warn" : "ok") : "";
-    $("aih").textContent = g.done ? (m.ai.ok ? "finished " + clock(m.ai.t) : "failed") : dist(P.len(P.add(g.r, S.r, -1))) + " away";
+    $("aih").textContent = m.noGhost ? "none here" : g.done ? (m.ai.ok ? "finished " + clock(m.ai.t) : "failed") : dist(P.len(P.add(g.r, S.r, -1))) + " away";
     $("thr").value = Math.round(ctl.thr * 100); $("thrv").textContent = Math.round(S.thr * 100) + "%"; $("warp").textContent = ctl.warp + "×";
     document.querySelectorAll("[data-hold]").forEach(b => b.classList.toggle("on", b.dataset.hold === ctl.hold));
   }
 
   // ---- landing legs, AI marker, landing instruments, map ----
-  let legs = 1, gear = null, fxEvent = null, paused = false, mapMode = "2d", pts = [], lastPt = -1e9, frameNo = 0, tel = [], telAt = -1e9, rec = [], recAt = -1e9, sharing = false;
+  let legs = 1, gear = null, fxEvent = null, paused = false, mapMode = "2d", pts = [], lastPt = -1e9, frameNo = 0, tel = [], telAt = -1e9, rec = [], recAt = -1e9, sharing = false, telOn = true;
   try { mapMode = localStorage.getItem("moonpilot.map") || "2d"; } catch (e) {}
   const landC = $("land").getContext("2d"), mapC = $("map2d").getContext("2d");
   function overlay(m, g, real) {
@@ -188,7 +204,7 @@
     if (sharing && flying && S.t - recAt >= (Q.h < 3000 ? 1 : 2)) {   // state and controls, only when the player shares flights
       rec.push([+S.t.toFixed(1), ...S.r.map(x => +x.toFixed(1)), ...S.v.map(x => +x.toFixed(2)), ...S.d.map(x => +x.toFixed(3)), +S.thr.toFixed(2), Math.round(S.m)]); recAt = S.t;
     }
-    if (S.t - telAt >= (Q.h < 3000 ? .5 : 2) || !flying && telAt < S.t) { tel.push([+S.t.toFixed(2), +Q.h.toFixed(1), +Math.hypot(Q.vr, Q.vh).toFixed(2), +Q.vr.toFixed(2), +S.thr.toFixed(2), +Q.fuel.toFixed(4)]); telAt = S.t; }
+    if (telOn && (S.t - telAt >= (Q.h < 3000 ? .5 : 2) || !flying && telAt < S.t)) { tel.push([+S.t.toFixed(2), +Q.h.toFixed(1), +Math.hypot(Q.vr, Q.vh).toFixed(2), +Q.vr.toFixed(2), +S.thr.toFixed(2), +Q.fuel.toFixed(4)]); telAt = S.t; }
     // legs come down on the pad and for landing, fold away in flight (G overrides)
     const want = gear !== null ? gear : (S.onPad || (S.phase === P.DESCENT && Q.h < 1500) || (S.phase === P.ASCENT && Q.h < 60)) ? 1 : 0;
     legs += P.clamp(want - legs, -real / 1.1, real / 1.1);
@@ -306,6 +322,67 @@
     });
   }
 
+  // ---- progression: experience, rank, daily streak, achievements (all kept on this device) ----
+  const RANKS = ["Cadet", "Trainee", "Pilot", "Senior Pilot", "Captain", "Commander", "Flight Director", "Legend"];
+  const ACH = [["first", "First footprint", "Land softly once"], ["beat", "Machine beaten", "Beat the AI on any mission"],
+    ["feather", "Feather touch", "Touch down slower than 0.5 m/s"], ["nocoach", "No hand-holding", "Finish a mission with the coach off"],
+    ["orbit", "Orbital", "Reach orbit"], ["full", "There and back", "Complete the Full Mission"], ["miser", "Fuel miser", "Land with a quarter of your fuel left"],
+    ["hotdrop", "Hot drop", "Land Final Descent in under a minute"], ["sweep", "Clean sweep", "Beat the AI on all four main missions"],
+    ["roll5", "On a roll", "Chain 5 landings in the Gauntlet"], ["roll10", "Untouchable", "Chain 10 landings in the Gauntlet"],
+    ["streak3", "Regular", "Fly the daily challenge 3 days running"], ["streak7", "Devoted", "Fly the daily challenge 7 days running"],
+    ["flyer", "Frequent flyer", "Finish 25 flights"], ["captain", "Captain", "Reach the rank of Captain"], ["litho", "Lithobraking", "Hit the ground at over 100 m/s"]];
+  const prof = {xp: 0, ach: {}, streak: 0, lastDay: 0, flights: 0};
+  try { Object.assign(prof, JSON.parse(localStorage.getItem("moonpilot.profile") || "{}")); } catch (e) {}
+  const level = xp => Math.floor(Math.sqrt(xp / 60)) + 1, rankName = l => RANKS[Math.min(RANKS.length - 1, Math.floor((l - 1) / 2))];
+  function renderProfile() {
+    const l = level(prof.xp), lo = 60 * (l - 1) ** 2, hi = 60 * l ** 2;
+    $("rname").textContent = `${rankName(l)} · level ${l}`; $("rxp").textContent = `${prof.xp} / ${hi} XP`; $("rbar").style.width = (100 * (prof.xp - lo) / (hi - lo)) + "%";
+    $("achb").textContent = `Achievements ${Object.keys(prof.ach).length}/${ACH.length}`;
+    $("streak").textContent = prof.streak > 1 && DAY - prof.lastDay <= 1 ? `${prof.streak}-day streak on the daily challenge` : "";
+  }
+  function showAch() {
+    show("achs", true);
+    $("achlist").innerHTML = ACH.map(a => `<div class="ach${prof.ach[a[0]] ? " got" : ""}"><b>${a[1]}</b><span>${a[2]}</span></div>`).join("");
+  }
+  function progress(m, sc, o, beat) {
+    const before = level(prof.xp), got = [], add = id => { if (!prof.ach[id]) { prof.ach[id] = DAY; got.push(ACH.find(a => a[0] === id)[1]); } };
+    const landed = o.ok && m.goal === "land" && !m.gauntlet;
+    let xp = m.gauntlet ? Math.round(gaunt.total / 8) + 5 : o.ok ? Math.round(sc.total / 10) : 8;
+    prof.flights++;
+    if (m.daily && o.ok && prof.lastDay !== DAY) { prof.streak = prof.lastDay === DAY - 1 ? prof.streak + 1 : 1; prof.lastDay = DAY; xp += 20 * Math.min(prof.streak, 7); }
+    if (landed || m.gauntlet && gaunt.round) add("first");
+    if (beat) add("beat");
+    if (landed && Math.abs(o.vr) < .5) add("feather");
+    if (o.ok && o.noCoach) add("nocoach");
+    if (o.ok && m.goal === "orbit") add("orbit");
+    if (o.ok && m.id === "full") add("full");
+    if (landed && o.fuel >= .25) add("miser");
+    if (landed && m.id === "descent" && o.t < 60) add("hotdrop");
+    if (prof.streak >= 3) add("streak3");
+    if (prof.streak >= 7) add("streak7");
+    if (m.gauntlet && gaunt.round >= 5) add("roll5");
+    if (m.gauntlet && gaunt.round >= 10) add("roll10");
+    if (!o.ok && o.why === "crashed" && Math.hypot(o.vr, o.vh) > 100) add("litho");
+    if (prof.flights >= 25) add("flyer");
+    if (["descent", "deorbit", "launch", "full"].every(id => { const x = MISSIONS.find(y => y.id === id); return x && x.ai.ok && best[id] > aiScore(x); })) add("sweep");
+    prof.xp += xp;
+    const after = level(prof.xp);
+    if (after >= 9) add("captain");
+    try { localStorage.setItem("moonpilot.profile", JSON.stringify(prof)); } catch (e) {}
+    if (m.gauntlet) $("rtable").innerHTML = sc.parts.map(p => `<tr><td>${p[0]}</td><td>${p[1]}</td></tr>`).join("") + `<tr><td>Best run</td><td>${Math.max(best.gauntlet || 0, sc.total)}</td></tr>`;
+    if (m.gauntlet) $("rtitle").textContent = gaunt.round ? `Gauntlet over: ${gaunt.round} landing${gaunt.round > 1 ? "s" : ""} in a row` : "Gauntlet over";
+    else if (m.goal === "land" && !o.ok && o.why === "crashed" && o.sev < 2.5) {      // a near miss deserves to hear how near
+      const over = [];
+      if (Math.abs(o.vr) > 3) over.push(`${(Math.abs(o.vr) - 3).toFixed(1)} m/s too fast`);
+      if (o.vh > 2) over.push(`${(o.vh - 2).toFixed(1)} m/s too much drift`);
+      if (o.tilt > 15) over.push(`${(o.tilt - 15).toFixed(0)}° too tilted`);
+      $("rtitle").textContent = "So close!"; $("rtext").textContent = "Only " + over.join(" and ") + ". Press Enter to try again.";
+    }
+    show("cmpb", !m.noGhost);
+    $("rxpline").textContent = `+${xp} XP` + (after > before ? ` · Level up: ${rankName(after)}, level ${after}` : "") + (got.length ? ` · Achievement${got.length > 1 ? "s" : ""}: ${got.join(", ")}` : "");
+    if (after > before || got.length) { beep(784, .15, .07, "triangle", .9); beep(1175, .35, .08, "triangle", 1.05); }
+  }
+
   // ---- end of mission ----
   let outcome = null;
   function finish(ok) {
@@ -317,12 +394,17 @@
     else if (fxEvent === "crashed") burst(1.8, .9, 1800);
     else if (ok) { beep(660, .15); beep(880, .3, .08, "sine", .15); }
     state = "ending"; endTimer = fxEvent ? 2.8 : 1.4; ctl.thr = 0; S.thr = 0;
+    if (m.gauntlet && ok) {                                // chain on: bank the points and line up a harder one
+      const pts = 100 + Math.round(120 * (1 - Math.min(1, Q.sev))) + Math.round(200 * Q.fuel);
+      gaunt.total += pts; gaunt.round++; nextRound = true; endTimer = 2.2; toast(`Landing ${gaunt.round} done: +${pts}. The next one is harder`);
+    }
   }
   function results() {
-    const m = MISSIONS[mi], sc = score(m, outcome), ai = aiScore(m), o = outcome;
+    const m = MISSIONS[mi], o = outcome, ai = aiScore(m);
+    const sc = m.gauntlet ? {total: gaunt.total, parts: [["Landings in a row", gaunt.round], ["Points", gaunt.total]]} : score(m, outcome);
     state = "result"; World.map.on = false; World.update(S, Q, null, {dt: 0, legs, event: null});   // redraw once without the map corner
     ["hud", "top", "pad", "coach", "map", "land", "aimark"].forEach(id => show(id, false)); show("result", true); audio(0);
-    const stars = !o.ok ? 0 : (!m.ai.ok || sc.total > ai) ? 3 : sc.total >= .9 * ai ? 2 : 1;
+    const stars = m.gauntlet ? (gaunt.round >= 10 ? 3 : gaunt.round >= 6 ? 2 : gaunt.round >= 3 ? 1 : 0) : !o.ok ? 0 : (!m.ai.ok || sc.total > ai) ? 3 : sc.total >= .9 * ai ? 2 : 1;
     $("rtitle").textContent = o.ok ? (m.goal === "orbit" ? "Orbit achieved" : "Touchdown!") : o.why === "lost" ? "Lost in space" : "Crashed";
     $("rstars").textContent = "★".repeat(stars) + "☆".repeat(3 - stars);
     $("rtext").textContent = m.goal === "land" && o.why !== "lost"
@@ -334,8 +416,8 @@
       `<tr><td>Result</td><td>${!o.ok ? "Try again" : stars === 3 ? "You beat the AI" : "The AI still leads"}</td></tr>`;
     shareText = `${pilot ? pilot + " flew " : ""}Moon Pilot - ${m.name}: ${sc.total} ${"★".repeat(stars)}${m.ai.ok ? " (the AI scored " + ai + ")" : ""}. Can you beat it?`;
     if (sc.total > (best[m.id] || 0)) { best[m.id] = sc.total; saveBest(); }
-    $("rpost").textContent = !o.ok ? "" : pilot ? "Posting your score..." : "Add a pilot name on the home screen to join the worldwide leaderboard.";
-    if (o.ok && pilot) Backend.score({name: pilot, mission: m.id, score: sc.total, ok: true, seconds: +o.t.toFixed(1), fuel: +P.clamp(o.fuel, 0, 1).toFixed(4), coach: !o.noCoach})
+    $("rpost").textContent = !(o.ok || m.gauntlet && gaunt.round) ? "" : pilot ? "Posting your score..." : "Add a pilot name on the home screen to join the worldwide leaderboard.";
+    if ((o.ok || m.gauntlet && gaunt.round) && pilot) Backend.score({name: pilot, mission: m.id, score: sc.total, ok: true, seconds: +o.t.toFixed(1), fuel: +P.clamp(o.fuel, 0, 1).toFixed(4), coach: !o.noCoach})
       .then(done => { $("rpost").textContent = done ? `Posted to the leaderboard as ${pilot}.` : "Could not reach the leaderboard. Your score is saved on this device."; });
     if (sharing && rec.length > 5) {                        // the player opted in: send the flight for AI training
       let rows = rec; while (rows.length > 2000) rows = rows.filter((_, i) => i % 2 === 0);
@@ -347,8 +429,10 @@
     $("cmp").innerHTML = `<tr><th></th><th>You</th><th class="ai">AI</th></tr>` + row("Score", sc.total, m.ai.ok ? ai : "failed") + row("Time", clock(o.t), clock(m.ai.t)) +
       row("Fuel left", Math.round(o.fuel * 100) + "%", Math.round(m.ai.fuel * 100) + "%") +
       (m.goal === "land" ? row("Touchdown speed", Math.abs(o.vr).toFixed(1) + " m/s", Math.abs(last[10]).toFixed(1) + " m/s") + row("Sideways speed", o.vh.toFixed(1) + " m/s", last[11].toFixed(1) + " m/s") : "");
+    ["chart", "savepng", "savejson"].forEach(id => show(id, telOn && tel.length > 1));
     show("cmp", false); $("result").classList.toggle("win", beat);
     if (beat) { $("rtitle").textContent = "You beat the AI!"; celebrate(); }
+    progress(m, sc, o, beat);
   }
 
   // ---- engine sound, synthesised (no audio files) ----
@@ -393,6 +477,7 @@
   const warp = dir => { ctl.warp = WARPS[P.clamp(WARPS.indexOf(ctl.warp) + dir, 0, WARPS.length - 1)]; };
   addEventListener("keydown", e => {
     const k = e.key.toLowerCase(); keys[k] = true;
+    if (state === "result" && (k === "enter" || k === "r") && $("board").classList.contains("hide")) return start();   // one more try
     if (state !== "fly") return;
     if (k === "1") setHold("up"); if (k === "2") setHold("pro"); if (k === "3") setHold("retro");
     if (k === ".") warp(1); if (k === ",") warp(-1); if (k === "r") start();
@@ -428,7 +513,11 @@
   $("boardb").onclick = () => board("overall"); $("rboard").onclick = () => board(MISSIONS[mi].id); $("bclose").onclick = () => show("board", false);
   try { sharing = localStorage.getItem("moonpilot.share") === "yes"; } catch (e) {}
   $("sharef").checked = sharing;
+  try { telOn = localStorage.getItem("moonpilot.tel") !== "off"; } catch (e) {}
+  $("telf").checked = telOn;
+  $("telf").onchange = e => { telOn = e.target.checked; try { localStorage.setItem("moonpilot.tel", telOn ? "on" : "off"); } catch (err) {} };
   $("sharef").onchange = e => { sharing = e.target.checked; try { localStorage.setItem("moonpilot.share", sharing ? "yes" : "no"); } catch (err) {} };
+  $("achb").onclick = showAch; $("achclose").onclick = () => show("achs", false);
   $("pname").value = pilot;
   $("pname").oninput = e => { pilot = e.target.value.replace(/[<>&"']/g, "").trim().slice(0, 16); try { localStorage.setItem("moonpilot.name", pilot); } catch (err) {} };
   $("share").onclick = () => {
@@ -437,5 +526,25 @@
     else if (navigator.clipboard) navigator.clipboard.writeText(shareText + " " + url).then(done).catch(() => {});
   };
   menu(); requestAnimationFrame(frame);
+  // ?shot=landing|launch|orbit poses a scene and freezes it, for store screenshots (tools/shots.sh)
+  const shot = new URLSearchParams(location.search).get("shot");
+  if (shot && shot !== "home") setTimeout(() => {
+    let now = performance.now() + 1e7; const T = () => (now += 50), go = id => { mi = MISSIONS.findIndex(m => m.id === id); start(); };
+    if (shot === "landing") {
+      go("descent"); ctl.hold = "retro";
+      while (state === "fly" && Q.h > 38) { const sp = Math.hypot(Q.vr, Q.vh); ctl.thr = P.clamp(.2 + .1 * (sp - Math.max(1.5, Q.h / 10)), 0, 1); tick(T()); }
+      ctl.thr = .55; World.cam.az = .5; World.cam.el = .22;
+    } else if (shot === "launch") {
+      go("launch"); ctl.thr = 1; ctl.hold = "manual";
+      while (state === "fly" && Q.h < 900) { ctl.pitch = Math.min(1.1, Math.max(0, (S.t - 8) * .03)); tick(T()); }
+      World.cam.az = 2.2; World.cam.el = .12;
+    } else {
+      go("deorbit"); mapMode = "3d"; ctl.thr = 1;
+      for (let i = 0; i < 160; i++) tick(T());
+      World.cam.zoom = 14; World.cam.el = .5;
+    }
+    for (let i = 0; i < 6; i++) tick(T());
+    paused = true; lastTip = null; $("toast").style.opacity = 0;
+  }, 3500);
   window.MoonPilot = {get state() { return {state, t: S && S.t, h: Q && Q.h, vr: Q && Q.vr, vh: Q && Q.vh, peri: Q && Q.peri, apo: Q && Q.apo, phase: S && S.phase, outcome}; }, get S() { return S; }, get Q() { return Q; }, ctl, keys, tick};   // for testing
 })();

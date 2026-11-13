@@ -29,7 +29,25 @@ map, daily challenge (14 AI-flown scenarios), sounds, share button, no-coach bon
 | 14 | Expansion plan | DONE | section below |
 | 18 | More planets and a realistic solar-system view | TODO | not started; expansion item 4. Needs per-world physics constants, textures, and AI retraining per world |
 | 19 | Build your own rocket, docking, research labs | TODO | future updates; expansion items 2, 3, 5 |
-| 20 | Telemetry on/off switch | TODO | recording is always on today |
+| 20 | Telemetry on/off switch | DONE | checkbox on the home screen, on by default; when off, no chart or save buttons. Not checked in a browser |
+
+## Autopilot session 2026-11-12/13 (goal: players come back; Microsoft Store by Monday 16 Nov)
+| Item | Status | Notes |
+|---|---|---|
+| Real Moon | DONE | NASA LRO colour map (4k desktop, 2k small screens) + height map as bump; drawn Moon is the offline fallback. Credit in `privacy.html` |
+| Pilot rank and XP | DONE | level = floor(sqrt(xp/60))+1; rank names every 2 levels; bar on the home screen; kept on the device |
+| Achievements | DONE | 16, overlay from the home screen, shown on the result screen when earned |
+| Daily streak | DONE | counts consecutive days with a completed daily challenge; bonus XP. Only checked by reading the code |
+| Near-miss feedback, Enter to retry | DONE | "So close!" with the exact excess; Enter or R on the result screen flies again |
+| Gauntlet mode | DONE | endless landings, harder each round, score = chained points; leaderboard tab; tested for 3 rounds |
+| Installable app (PWA) | DONE | `manifest.webmanifest`, `sw.js` (offline cache), maskable icon. Not yet run through PWABuilder |
+| Privacy policy | DONE | `www/privacy.html` |
+| Store screenshots | DONE | `bash tools/shots.sh` -> `store/*.png` at 1920x1080 using `?shot=` scenes and headless Chrome |
+| Microsoft Store guide and listing text | DONE | `docs/MICROSOFT-STORE.md`. Owner must reserve the name, package with PWABuilder and submit |
+| Regression | DONE | coach-following robot completed all four missions after these changes (1671 / 1479 / 1676 / 1596) |
+| More worlds (#18) | TODO | design notes: parameterise `orbit3d.py` and `physics.js` by body (mu, radius, spin); Europa and Ceres first; ~32 min AI training per world |
+| Landing pad targets | TODO | marked pad with a precision bonus |
+| Earning inside the Store build | TODO | ads or a supporter purchase; nothing built |
 
 ## Backend for #11 and #12 (built 2026-11-11; schema in `tools/backend.sql`, client in `www/js/backend.js`)
 - Supabase, free tier. Tables: `scores(id, created_at, player_id uuid, name text<=16, mission text,
