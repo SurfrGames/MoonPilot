@@ -45,6 +45,7 @@ map, daily challenge (14 AI-flown scenarios), sounds, share button, no-coach bon
 | Store screenshots | DONE | `bash tools/shots.sh` -> `store/*.png` at 1920x1080 using `?shot=` scenes and headless Chrome |
 | Microsoft Store guide and listing text | DONE | `docs/MICROSOFT-STORE.md`. Owner must reserve the name, package with PWABuilder and submit |
 | Regression | DONE | coach-following robot completed all four missions after these changes (1671 / 1479 / 1676 / 1596) |
+| Sound on/off, full screen, gamepad | PART | `N` or the Sound button mutes (checked); `F` full screen and Xbox-style gamepad (triggers throttle, sticks steer, A/B/X point, Y cut, bumpers warp, Start pause) are written but untested: no gamepad here |
 | More worlds (#18) | TODO | design notes: parameterise `orbit3d.py` and `physics.js` by body (mu, radius, spin); Europa and Ceres first; ~32 min AI training per world |
 | Landing pad targets | TODO | marked pad with a precision bonus |
 | Earning inside the Store build | TODO | ads or a supporter purchase; nothing built |

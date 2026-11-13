@@ -40,6 +40,9 @@ put a secret key in the repo). Delete your own test rows after testing.
   and open it with `preview_start {url}`.
 - Test flights without a visible window: call `MoonPilot.tick(fakeTime)` in a loop from the
   browser console tool; the page throttles real frames when hidden.
+- The browser pane caches JS: after editing, run `await Promise.all(['js/game.js','js/world.js'].map(u => fetch(u, {cache: 'reload'}))); location.reload()` before testing.
+- Long test flights time out the console tool: run them in `setTimeout` chunks and poll a result variable.
+- Store screenshots: `bash moon-pilot/tools/shots.sh` (installed Chrome, headless; the bundled headless shell crashes here).
 - Patch big JS files with a small Python script written by the Write tool; long shell heredocs
   containing JS have failed.
 - A folder named `vendor` is skipped when the app copies a project; the library lives in `lib/`.

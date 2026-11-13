@@ -106,6 +106,25 @@
     if (ctl.hold === "manual") return;
     ctl.pitch = Math.atan2(P.dot(S.d, Q.et), P.dot(S.d, Q.er)); ctl.yaw = Math.asin(P.clamp(P.dot(S.d, Q.ec), -1, 1)); ctl.hold = "manual";
   }
+  // ---- gamepad (Xbox layout): triggers throttle, left stick pitch, right stick yaw, A retrograde, B up,
+  //      X prograde, Y cut engine, bumpers time warp, Start pause. A on the result screen flies again. ----
+  let padPrev = [];
+  function padState() {
+    const g = navigator.getGamepads ? [...navigator.getGamepads()].find(x => x && x.connected) : null;
+    if (!g) return null;
+    const now = g.buttons.map(b => b.pressed);
+    return {g, hit: i => now[i] && !padPrev[i], done: () => { padPrev = now; }};
+  }
+  function gamepad(dt) {
+    const p = padState(); if (!p) return;
+    const g = p.g, ax = i => Math.abs(g.axes[i] || 0) > .2 ? g.axes[i] : 0, val = i => g.buttons[i] ? g.buttons[i].value : 0;
+    if (val(7) || val(6)) ctl.thr = P.clamp(ctl.thr + (val(7) - val(6)) * .9 * dt, 0, 1);
+    if (ax(0)) { manual(); ctl.pitch += ax(0) * 35 * DEG * dt; }
+    if (ax(2)) { manual(); ctl.yaw = P.clamp(ctl.yaw + ax(2) * 25 * DEG * dt, -60 * DEG, 60 * DEG); }
+    if (p.hit(0)) ctl.hold = "retro"; if (p.hit(1)) ctl.hold = "up"; if (p.hit(2)) ctl.hold = "pro"; if (p.hit(3)) ctl.thr = 0;
+    if (p.hit(5)) warp(1); if (p.hit(4)) warp(-1); if (p.hit(9)) paused = !paused;
+    p.done();
+  }
   function input(dt) {
     if (keys.w) ctl.thr = Math.min(1, ctl.thr + .7 * dt);
     if (keys.s) ctl.thr = Math.max(0, ctl.thr - .7 * dt);
@@ -127,8 +146,10 @@
   function tick(now) {
     const real = Math.max(0, Math.min(.05, (now - last) / 1000)); last = now;
     if (state === "menu") return World.attract(now / 1000);
+    if (state === "result") { const p = padState(); if (p) { const again = p.hit(0); p.done(); if (again) return start(); } }
     if (state !== "fly" && state !== "ending") return;
     const m = MISSIONS[mi];
+    if (state === "fly") gamepad(real);
     if (state === "fly" && !paused) {
       input(real);
       const maxWarp = S.phase === P.DESCENT && Q.h < 1000 ? 10 : 100;   // full range except on final approach
@@ -436,19 +457,22 @@
   }
 
   // ---- engine sound, synthesised (no audio files) ----
-  let ac = null, gain = null, noise = null, warnAt = 0, shareText = "";
+  let ac = null, gain = null, noise = null, warnAt = 0, shareText = "", master = null, muted = false;
+  try { muted = localStorage.getItem("moonpilot.mute") === "yes"; } catch (e) {}
+  const out = () => master || (master = ac.createGain(), master.gain.value = muted ? 0 : 1, master.connect(ac["destination"]), master);
+  function setMute(m) { muted = m; if (master) master.gain.value = m ? 0 : 1; $("muteb").textContent = m ? "Sound off" : "Sound on"; try { localStorage.setItem("moonpilot.mute", m ? "yes" : "no"); } catch (e) {} }
   function beep(freq, dur, vol = .08, type = "sine", when = 0) {
     if (!ac) return;
     const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + when;
     o.type = type; o.frequency.value = freq; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
-    o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur);
+    o.connect(g); g.connect(out()); o.start(t); o.stop(t + dur);
   }
   function burst(dur, vol, cutoff) {                        // filtered noise: a thud or an explosion
     if (!ac) return;
     const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(), t = ac.currentTime;
     s.buffer = noise; f.type = "lowpass"; f.frequency.setValueAtTime(cutoff, t); f.frequency.exponentialRampToValueAtTime(60, t + dur);
     g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
-    s.connect(f); f.connect(g); g.connect(ac.destination); s.start(t); s.stop(t + dur);
+    s.connect(f); f.connect(g); g.connect(out()); s.start(t); s.stop(t + dur);
   }
   function warnings() {                                     // sink-rate alarm near the ground, and a low-fuel chirp
     const now = performance.now();
@@ -468,7 +492,7 @@
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       const src = ac.createBufferSource(), lp = ac.createBiquadFilter(); src.buffer = buf; src.loop = true;
       lp.type = "lowpass"; lp.frequency.value = 420; gain = ac.createGain(); gain.gain.value = 0;
-      src.connect(lp); lp.connect(gain); gain.connect(ac.destination); src.start();
+      src.connect(lp); lp.connect(gain); gain.connect(out()); src.start();
     } catch (e) { ac = null; }
   }
 
@@ -481,7 +505,8 @@
     if (state !== "fly") return;
     if (k === "1") setHold("up"); if (k === "2") setHold("pro"); if (k === "3") setHold("retro");
     if (k === ".") warp(1); if (k === ",") warp(-1); if (k === "r") start();
-    if (k === "g") gear = legs > .5 ? 0 : 1; if (k === "m") cycleMap();
+    if (k === "g") gear = legs > .5 ? 0 : 1; if (k === "m") cycleMap(); if (k === "n") setMute(!muted);
+    if (k === "f") { if (document.fullscreenElement) document.exitFullscreen(); else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); }
     if (k === "p" || k === "escape") { paused = !paused; toast(paused ? "Paused. Press P to continue" : "Go"); }
   });
   addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
@@ -495,6 +520,7 @@
   $("coachb").classList.toggle("on", coachOn);
   $("camb").onclick = () => { World.cam.mode = World.cam.mode === "follow" ? "whole" : "follow"; };
   const cycleMap = () => { mapMode = {"2d": "3d", "3d": "off", "off": "2d"}[mapMode]; $("mapb").textContent = "Map " + mapMode.toUpperCase(); try { localStorage.setItem("moonpilot.map", mapMode); } catch (e) {} };
+  $("muteb").onclick = () => setMute(!muted); $("muteb").textContent = muted ? "Sound off" : "Sound on";
   $("mapb").onclick = cycleMap; $("mapb").textContent = "Map " + mapMode.toUpperCase();
   $("restart").onclick = $("retry").onclick = () => start();
   $("go").onclick = () => { initAudio(); start(); };

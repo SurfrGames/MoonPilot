@@ -175,7 +175,7 @@ const World = (() => {
   // ---- rockets (feet at the origin, nose along +Y). Legs fold up in flight and swing down to land. ----
   function makeRocket(ghost) {
     const grp = new THREE.Group(), o = ghost ? {transparent: true, opacity: .38, depthWrite: false} : {};
-    const mat = c => new THREE.MeshStandardMaterial({color: ghost ? 0x59c2ff : c, metalness: .15, roughness: .55, ...o});
+    const mat = c => new THREE.MeshStandardMaterial({color: ghost ? 0x59c2ff : c, metalness: .15, roughness: .55, emissive: ghost ? 0 : c, emissiveIntensity: .2, ...o});   // a little self-light so the shaded side still reads
     const part = (geo, m, y, parent = grp) => { const p = new THREE.Mesh(geo, m); p.position.y = y; parent.add(p); return p; };
     part(new THREE.CylinderGeometry(.0017, .0021, .006, 24), mat(0xeef0f4), .0062);
     part(new THREE.CylinderGeometry(.00212, .00212, .0005, 24), mat(0x20242c), .0046);
