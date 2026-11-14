@@ -15,14 +15,29 @@ A free browser game: fly a real-physics Moon rocket and race the ghost of a PPO 
 learned launch -> orbit -> land. Goal: earn through web-portal ads, Android, and itch.io tips
 (plan in `.agents/product-marketing-context.md`).
 
+## Where things stand (updated 2026-11-14)
+- Branch `feat/daily-sound` holds everything; `main` is still the first commit. All branches are pushed.
+- Live build: https://surfrgames.github.io/moonpilot-play/ (public repo `SurfrGames/moonpilot-play`).
+- Target: Microsoft Store release around Mon 16 Nov 2026. The owner must do the Partner Center and
+  PWABuilder steps in `moon-pilot/docs/MICROSOFT-STORE.md`, including the `supporter` add-on.
+- The owner put Claude on autopilot on 2026-11-12: build, publish, commit and push without asking.
+  Still never create accounts, enter credentials or payment details, or post in the owner's name.
+- Next ideas, in order: fix whatever PWABuilder flags; first real purchase test; landing-pad targets;
+  solar-system map; retrain Ceres landing; ads. Details and statuses are in the backlog.
+
 ## Layout
 - `moon-pilot/www/` — the game, plain HTML/JS, no build step. `js/physics.js` (must stay equal
   to the Python physics), `js/world.js` (three.js r128 scene and effects), `js/game.js`
   (missions, controls, HUD, coach, scoring, map, sounds), `data/ghosts.js` (generated).
 - `rocket-lander/orbit3d.py` — environment, trainer, `export` (regenerates `ghosts.js`).
   Trained model: `rocket-lander/models/orbit3d.zip`.
-- `moon-pilot/tools/` — `parity.js` (JS vs Python physics), `deploy-pages.sh` (publish),
-  `make_logo.py`.
+- Also in `www/js/`: `backend.js` (leaderboard, flight sharing), `store.js` (Supporter Pack purchase).
+  `www/data/ghosts-<world>.js` hold Europa and Ceres. `sw.js` + `manifest.webmanifest` make it installable;
+  bump `VERSION` in `sw.js` on each release.
+- Other worlds: `ORBIT3D_BODY=europa|ceres uv run orbit3d.py train|export`; models `orbit3d-<world>.zip`.
+- `moon-pilot/tools/` — `parity.js [world]` (JS vs Python physics), `deploy-pages.sh` (publish),
+  `shots.sh` (store screenshots into `store/`), `pull_flights.py`, `backend.sql`, `make_logo.py`.
+- `moon-pilot/docs/` — `BACKLOG.md`, `MICROSOFT-STORE.md` (submission steps and listing text).
 
 ## Backend
 Supabase project `moon-pilot` (ref `mjzmndrphrjgwozifvrk`): leaderboard and opt-in flight sharing.

@@ -83,7 +83,18 @@ map, daily challenge (14 AI-flown scenarios), sounds, share button, no-coach bon
 6. **Money:** web-portal ad SDK, Android build with rewarded ads and a one-time unlock,
    supporter pack (skins). See `.agents/product-marketing-context.md`.
 
+## Waiting on the owner (as of 2026-11-14)
+1. Partner Center: reserve "Moon Pilot", copy the three identity values.
+2. pwabuilder.com: package `https://surfrgames.github.io/moonpilot-play/` with those values; report anything it flags.
+3. Create the Durable add-on with product ID `supporter`; submit app + add-on.
+4. After release: make one real Supporter Pack purchase and report the result.
+5. Optional: set `SUPABASE_SECRET_KEY` and run `tools/pull_flights.py` once players share flights.
+6. Feedback from friends who tested (the checklist was sent on 2026-11-11); none recorded yet.
+
 ## Not verified yet
+- 2026-11-14: gamepad and full screen (no gamepad here); a real Store purchase; PWABuilder report;
+  Europa and Ceres Deorbit & Land and Full Mission by robot; Europa/Ceres visuals judged by a person;
+  daily streak across real days; the home screen and Hangar on a phone.
 - 2026-11-11 round: checked with scripted flights at 1280x760 only. Confetti, chart and compare table were seen in one small screenshot. Custom warp prompt, Save buttons and the home screen on a phone were not exercised.
 - Performance of the 4096 Moon texture on phones.
 - Sounds have not been heard by anyone on the team.
