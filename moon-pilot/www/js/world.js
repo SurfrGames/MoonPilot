@@ -293,6 +293,17 @@ const World = (() => {
     cam.whole = R * 3;
   }
 
+  // rocket colours: s = {body, accent, trail} as hex numbers
+  function setSkin(s) {
+    rocket.traverse(o => {
+      if (!o.isMesh || !o.material.color) return;
+      const role = o.userData.role || (o.userData.role = {[0xeef0f4]: "body", [0xffb454]: "accent"}[o.material.color.getHex()] || "other");
+      if (role === "other") return;
+      o.material.color.setHex(s[role]); if (o.material.emissive) o.material.emissive.setHex(s[role]);
+    });
+    trail.material.color.setHex(s.trail);
+  }
+
   const cam = {mode: "follow", az: .9, el: .28, zoom: 1, whole: 5200}, map = {on: false, rect: [0, 0, 0, 0]};
   const up = V(), east = V(), north = V(), tgt = V(), dirM = V(), basis = new THREE.Matrix4(), tmp = V(), start = {p: V(1, 0, 0), n: V(0, 0, 1)};
   let anchor = null, shake = 0, squash = 0, wrecked = false;
@@ -421,5 +432,5 @@ const World = (() => {
   function resize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
   addEventListener("resize", resize); resize();
 
-  return {setMission, update, attract, project, setBody, cam, map, zoom};
+  return {setMission, update, attract, project, setBody, setSkin, cam, map, zoom};
 })();

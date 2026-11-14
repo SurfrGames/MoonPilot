@@ -49,7 +49,9 @@ map, daily challenge (14 AI-flown scenarios), sounds, share button, no-coach bon
 | More worlds (#18) | PART | Europa and Ceres are in: world tabs on the home screen, four missions each, own leaderboard ids, Jupiter in Europa's sky. Europa AI: 100% orbit and landing. Ceres AI: 100% orbit, 42% landing, so two Ceres missions honestly show "AI failed". Physics parity within 4 cm on all three worlds. Robot test: descent and launch pass on both; deorbit and full mission not flown there. Surfaces are drawn, not photos. No solar-system map yet. Add a world: add it to `BODIES` in `orbit3d.py`, `ORBIT3D_BODY=x uv run orbit3d.py train` then `export`, add a look in `LOOKS` (world.js), a name in `WORLD_NAMES` (game.js), a script tag, and the id in the DB mission check |
 | Coach launch technique | DONE | if the orbit's high point passes 60 km before the low point reaches 10 km, the coach says cut, coast to the top, then burn prograde. Needed for worlds where orbital speed arrives early; Moon launch unchanged (475 s) |
 | Landing pad targets | TODO | marked pad with a precision bonus |
-| Earning inside the Store build | TODO | ads or a supporter purchase; nothing built |
+| Hangar and rocket colours | DONE | 4 colours earned at levels 1, 3, 6, 9; 3 supporter colours shown only where they can be bought |
+| Supporter Pack (Store purchase) | PART | `www/js/store.js`, Digital Goods API, add-on product ID `supporter`. Tested against a simulated Store only; a real purchase needs the published app and add-on. Ownership is cached on the device, so it is spoofable (cosmetic only) |
+| Ads | TODO | nothing built |
 
 ## Backend for #11 and #12 (built 2026-11-11; schema in `tools/backend.sql`, client in `www/js/backend.js`)
 - Supabase, free tier. Tables: `scores(id, created_at, player_id uuid, name text<=16, mission text,

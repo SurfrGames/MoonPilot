@@ -384,7 +384,7 @@
   const level = xp => Math.floor(Math.sqrt(xp / 60)) + 1, rankName = l => RANKS[Math.min(RANKS.length - 1, Math.floor((l - 1) / 2))];
   function renderProfile() {
     const l = level(prof.xp), lo = 60 * (l - 1) ** 2, hi = 60 * l ** 2;
-    $("rname").textContent = `${rankName(l)} · level ${l}`; $("rxp").textContent = `${prof.xp} / ${hi} XP`; $("rbar").style.width = (100 * (prof.xp - lo) / (hi - lo)) + "%";
+    $("rname").textContent = `${rankName(l)} · level ${l}` + (Store.owned() ? " · Supporter" : ""); $("rxp").textContent = `${prof.xp} / ${hi} XP`; $("rbar").style.width = (100 * (prof.xp - lo) / (hi - lo)) + "%";
     $("achb").textContent = `Achievements ${Object.keys(prof.ach).length}/${ACH.length}`;
     $("streak").textContent = prof.streak > 1 && DAY - prof.lastDay <= 1 ? `${prof.streak}-day streak on the daily challenge` : "";
   }
@@ -430,6 +430,41 @@
     $("rxpline").textContent = `+${xp} XP` + (after > before ? ` · Level up: ${rankName(after)}, level ${after}` : "") + (got.length ? ` · Achievement${got.length > 1 ? "s" : ""}: ${got.join(", ")}` : "");
     if (after > before || got.length) { beep(784, .15, .07, "triangle", .9); beep(1175, .35, .08, "triangle", 1.05); }
   }
+
+  // ---- hangar: rocket colours, earned by rank or unlocked all at once by the Supporter Pack ----
+  const SKINS = [
+    {id: "classic", name: "Classic", body: 0xeef0f4, accent: 0xffb454, trail: 0xffb454, level: 1},
+    {id: "signal", name: "Signal", body: 0xff7a3d, accent: 0x20242c, trail: 0xff7a3d, level: 3},
+    {id: "midnight", name: "Midnight", body: 0x2b3350, accent: 0x59c2ff, trail: 0x59c2ff, level: 6},
+    {id: "arctic", name: "Arctic", body: 0xdff3ff, accent: 0x3fa7d6, trail: 0xbfe9ff, level: 9},
+    {id: "gold", name: "Gold", body: 0xe6b422, accent: 0xfff1c9, trail: 0xffd76a, supporter: true},
+    {id: "aurora", name: "Aurora", body: 0x1f8f7a, accent: 0xb6ffce, trail: 0x7dffb0, supporter: true},
+    {id: "crimson", name: "Crimson", body: 0xb3202e, accent: 0xffd9a0, trail: 0xff5a5a, supporter: true}];
+  let skin = "classic";
+  try { skin = localStorage.getItem("moonpilot.skin") || "classic"; } catch (e) {}
+  const unlocked = s => Store.owned() || (!s.supporter && level(prof.xp) >= s.level);
+  function applySkin() { World.setSkin(SKINS.find(s => s.id === skin && unlocked(s)) || SKINS[0]); }
+  function showHangar() {
+    show("hangar", true);
+    const hex = n => "#" + n.toString(16).padStart(6, "0");
+    $("skins").innerHTML = "";
+    SKINS.filter(s => !s.supporter || Store.available() || Store.owned()).forEach(s => {      // supporter colours appear only where they can be bought
+      const b = document.createElement("button"), ok = unlocked(s);
+      b.className = "skin" + (s.id === skin && ok ? " on" : "") + (ok ? "" : " locked");
+      b.innerHTML = `<i style="background:${hex(s.body)}"></i><i style="background:${hex(s.accent)}"></i><b>${s.name}</b>` +
+        `<span>${ok ? (s.id === skin ? "Selected" : "Select") : s.supporter ? "Supporter Pack" : "Reach level " + s.level}</span>`;
+      b.onclick = () => {
+        if (ok) { skin = s.id; try { localStorage.setItem("moonpilot.skin", skin); } catch (e) {} applySkin(); showHangar(); }
+        else if (s.supporter) buySupporter();
+      };
+      $("skins").appendChild(b);
+    });
+    show("support", Store.available() && !Store.owned());
+    $("support").textContent = "Get the Supporter Pack" + (Store.price() ? " · " + Store.price() : "");
+    $("supnote").textContent = Store.owned() ? "Thank you for supporting Moon Pilot. Every colour is unlocked."
+      : Store.available() ? "One purchase unlocks every rocket colour and supports the game." : "More colours unlock as your pilot level rises.";
+  }
+  function buySupporter() { Store.buy().then(ok => { if (ok) { applySkin(); toast("Thank you! Supporter Pack unlocked"); celebrate(); } showHangar(); }); }
 
   // ---- end of mission ----
   let outcome = null;
@@ -570,6 +605,7 @@
   $("telf").checked = telOn;
   $("telf").onchange = e => { telOn = e.target.checked; try { localStorage.setItem("moonpilot.tel", telOn ? "on" : "off"); } catch (err) {} };
   $("sharef").onchange = e => { sharing = e.target.checked; try { localStorage.setItem("moonpilot.share", sharing ? "yes" : "no"); } catch (err) {} };
+  $("hangarb").onclick = showHangar; $("hangarclose").onclick = () => show("hangar", false); $("support").onclick = buySupporter;
   $("achb").onclick = showAch; $("achclose").onclick = () => show("achs", false);
   $("pname").value = pilot;
   $("pname").oninput = e => { pilot = e.target.value.replace(/[<>&"']/g, "").trim().slice(0, 16); try { localStorage.setItem("moonpilot.name", pilot); } catch (err) {} };
@@ -579,6 +615,7 @@
     else if (navigator.clipboard) navigator.clipboard.writeText(shareText + " " + url).then(done).catch(() => {});
   };
   try { const w = localStorage.getItem("moonpilot.world"); if (w && w !== "moon") setWorld(w); } catch (e) {}
+  applySkin(); Store.init().then(() => { applySkin(); renderProfile(); });
   menu(); requestAnimationFrame(frame);
   // ?shot=landing|launch|orbit poses a scene and freezes it, for store screenshots (tools/shots.sh)
   const shot = new URLSearchParams(location.search).get("shot");

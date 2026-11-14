@@ -55,6 +55,9 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#1a1205
 .streak{color:var(--accent);font-size:13px;margin-top:6px}.xp{color:var(--good);font-weight:600;margin:-6px 0 8px}
 .ach{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-top:6px;opacity:.42}
 .ach.got{opacity:1;border-color:var(--accent)}.ach span{color:var(--dim);font-size:13px;text-align:right}#achs{z-index:6}
+#skins{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:8px}#hangar{z-index:6}
+.skin{display:grid;grid-template-columns:auto auto 1fr;gap:4px 6px;align-items:center;text-align:left;padding:10px}
+.skin i{width:16px;height:16px;border-radius:50%;border:1px solid rgba(255,255,255,.3)}.skin span{grid-column:1/-1;color:var(--dim);font-size:12px}.skin.locked{opacity:.55}
 .stats{margin-top:14px;color:var(--dim);font-size:13px}
 .home .card{position:relative;background:rgba(14,21,33,.72);backdrop-filter:blur(8px);border-color:var(--line);padding:14px 16px 14px 20px;margin-top:10px;transition:transform .18s,border-color .18s,background .18s}
 .home .card::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:2px;background:var(--line);transition:background .18s}
@@ -138,7 +141,7 @@ kbd{border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px ui-mo
     <label class="sharef"><input type="checkbox" id="sharef"><span>Share my flights to help train the AI <small>(flight path and controls only, no personal data)</small></span></label>
     <label class="sharef"><input type="checkbox" id="telf"><span>Record flight graphs <small>(height and speed chart after each flight)</small></span></label>
     <div id="stats" class="stats"></div>
-    <div class="btns"><button id="boardb">Worldwide leaderboard</button><button id="achb">Achievements</button></div>
+    <div class="btns"><button id="boardb">Worldwide leaderboard</button><button id="achb">Achievements</button><button id="hangarb">Hangar</button></div>
   </div>
   <div class="cards"><div id="worlds" class="btns hide" style="margin:0 0 4px"></div><div id="cards"></div></div>
 </div>
@@ -180,6 +183,14 @@ kbd{border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px ui-mo
     <div class="btns"><button id="achclose" class="primary">Close</button></div>
   </div>
 </div>
+<div id="hangar" class="screen hide">
+  <div class="panel">
+    <h2>Hangar</h2>
+    <div id="supnote" class="sub"></div>
+    <div id="skins"></div>
+    <div class="btns"><button id="support" class="primary hide"></button><button id="hangarclose">Close</button></div>
+  </div>
+</div>
 <div id="confetti"></div>
 <script src="lib/three.min.js"></script>
 <script src="data/ghosts.js"></script>
@@ -188,6 +199,7 @@ kbd{border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px ui-mo
 <script src="js/physics.js"></script>
 <script src="js/world.js"></script>
 <script src="js/backend.js"></script>
+<script src="js/store.js"></script>
 <script src="js/game.js"></script>
 <script>if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 </body>

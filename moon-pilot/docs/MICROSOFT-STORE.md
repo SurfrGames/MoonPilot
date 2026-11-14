@@ -47,6 +47,7 @@ ghost flies beside you. Beat its score.
 - A flight coach that tells you what to do next, and 15% extra score when you fly without it
 - The real Moon: surface imagery and terrain from NASA's Lunar Reconnaissance Orbiter
 - Worldwide leaderboard, pilot ranks, 16 achievements and daily streaks
+- A Hangar of rocket colours to earn as your rank rises
 - Flight graphs after every mission: your height and speed against the AI's
 - Time warp up to 100x, 2D and 3D orbit maps, keyboard or touch controls
 - No accounts, no ads, works offline after the first visit
@@ -58,8 +59,25 @@ Gauntlet mode · Worldwide leaderboard · NASA Moon imagery
 
 **What's new (1.0):** First release.
 
+## The Supporter Pack (how the Store version earns)
+The game sells one optional add-on: a Supporter Pack that unlocks every rocket colour. It only
+appears inside the app installed from the Microsoft Store (Edge 134 or newer on Windows); the
+web version shows no purchase.
+
+Set it up in Partner Center before or after the first submission:
+1. Your app -> Add-ons -> Create a new add-on -> type **Durable**.
+2. **Product ID: `supporter`** (exactly; the game looks for this ID).
+3. Pricing: your choice. A low one-time price suits a cosmetic pack.
+4. Store listing: title "Supporter Pack", description "Unlocks every rocket colour in the
+   Hangar, now and in future updates, and supports the game's development."
+5. Submit the add-on. It goes through certification like the app.
+
+Not tested for real: the purchase code follows Microsoft's Digital Goods API documentation and
+was exercised against a simulated Store, but a real purchase can only be tried after the app
+and add-on are published. Test it once yourself and tell Claude what happens.
+
 ## After the first release
 - Every web update is live for Store users at once; a new package is only needed for icon, name
   or capability changes.
 - To make the app update its offline copy immediately, bump `VERSION` in `www/sw.js`.
-- Earning inside the Store build (ads or a supporter purchase) is not built yet.
+- Ads are not built. The Supporter Pack above is the only purchase.
