@@ -42,6 +42,7 @@ ghost flies beside you. Beat its score.
 
 - Five ways to fly: Final Descent, Deorbit and Land, Launch to Orbit, the Full Mission, and a
   new Daily Challenge every day
+- Three worlds: the Moon, icy Europa with Jupiter in the sky, and low-gravity Ceres
 - Gauntlet mode: chain landings that get higher, faster and lower on fuel until one goes wrong
 - A flight coach that tells you what to do next, and 15% extra score when you fly without it
 - The real Moon: surface imagery and terrain from NASA's Lunar Reconnaissance Orbiter

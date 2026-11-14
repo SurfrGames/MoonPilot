@@ -28,6 +28,24 @@
     brief: "Land again and again. Every landing starts higher, faster and with less fuel. One crash ends the run. How many can you chain?",
     steps: ["Each round: brake, stop your drift, touch down under 3 m/s.", "Soft landings and spare fuel score more.", "Your best run goes on the worldwide leaderboard."],
     start: GHOSTS.descent.start, rows: [[0, 0, 0, 0, 0, 0, 1, 0, 2, 0, 0, 0, 0]], ai: {ok: false, text: "", t: 0, fuel: 0, sev: 0}});
+  // ---- worlds: the Moon list above, plus any world whose AI data file is present ----
+  const MOON_BODY = {mu: P.MU, r: P.R, omega: P.OMEGA}, MOON_LIST = MISSIONS.slice(), EXTRA = (window.GHOSTS && GHOSTS.worlds) || {};
+  const WORLD_NAMES = {moon: "Moon", europa: "Europa", ceres: "Ceres"};
+  let world = "moon";
+  function setWorld(id) {
+    if (id !== "moon" && !EXTRA[id]) id = "moon";
+    world = id;
+    const W = EXTRA[id], body = W ? W.body : MOON_BODY;
+    P.setBody(body); World.setBody(id, body);
+    MISSIONS.length = 0;
+    if (!W) MISSIONS.push(...MOON_LIST);
+    else for (const k of ["descent", "deorbit", "launch", "full"]) {
+      const base = MOON_LIST.find(m => m.id === k);
+      if (base && W[k]) MISSIONS.push({...base, ...W[k], id: id + "-" + k, par: W[k].ai.ok ? Math.round(W[k].ai.t * 1.3) : base.par,
+        brief: k === "deorbit" ? "You are in orbit. Point retrograde, brake, come down and land anywhere." : base.brief});
+    }
+    try { localStorage.setItem("moonpilot.world", id); } catch (e) {}
+  }
   let gaunt = {round: 0, total: 0}, nextRound = false;
   function gauntletStart(k) {
     const b = GHOSTS.descent.start, er = P.unit(b.r), et = P.unit(P.cross(b.nrm, er)), ec = P.cross(er, et);
@@ -61,6 +79,9 @@
   function menu() {
     state = "menu"; ["hud", "top", "pad", "brief", "result", "coach", "map", "land", "aimark"].forEach(id => show(id, false)); show("menu", true); audio(0);
     $("cards").innerHTML = ""; renderProfile();
+    const ws = ["moon", ...Object.keys(EXTRA)];
+    $("worlds").innerHTML = ""; show("worlds", ws.length > 1);
+    ws.forEach(id => { const b = document.createElement("button"); b.textContent = WORLD_NAMES[id] || id; b.className = id === world ? "on" : ""; b.onclick = () => { setWorld(id); menu(); }; $("worlds").appendChild(b); });
     const flown = MISSIONS.filter(m => best[m.id]);
     $("stats").textContent = flown.length ? `${flown.length} of ${MISSIONS.length} flown · total score ${flown.reduce((a, m) => a + best[m.id], 0)}` : "No flights yet. Start with Final Descent.";
     MISSIONS.forEach((m, i) => {
@@ -88,7 +109,7 @@
   function start(next) {
     const m = MISSIONS[mi];
     if (m.gauntlet) { if (!next) gaunt = {round: 0, total: 0}; m.start = gauntletStart(gaunt.round); m.rows = [[0, ...m.start.r, ...m.start.d, 0, 2, 0, 0, 0, 0]]; }
-    S = P.create(m.start); Q = P.derive(S); gi = 0; endTimer = 0; lastTip = null; coachUsed = false; legs = m.start.onPad ? 1 : 0; gear = null; fxEvent = null; paused = false; pts = []; lastPt = -1e9; tel = []; telAt = -1e9; rec = []; recAt = -1e9;
+    S = P.create(m.start); Q = P.derive(S); gi = 0; endTimer = 0; lastTip = null; coachUsed = false; circ = false; legs = m.start.onPad ? 1 : 0; gear = null; fxEvent = null; paused = false; pts = []; lastPt = -1e9; tel = []; telAt = -1e9; rec = []; recAt = -1e9;
     Object.assign(ctl, {thr: 0, pitch: 0, yaw: 0, warp: 1, hold: m.start.phase === P.DESCENT ? "retro" : "up"});
     World.setMission(m.start, m.rows); $("confetti").innerHTML = "";
     ["menu", "brief", "result"].forEach(id => show(id, false)); ["hud", "top", "pad"].forEach(id => show(id, true));
@@ -171,7 +192,7 @@
   }
 
   // ---- flight coach: one plain instruction for the current moment ----
-  let coachOn = true, lastTip = null, coachUsed = false;
+  let coachOn = true, lastTip = null, coachUsed = false, circ = false;
   try { coachOn = localStorage.getItem("moonpilot.coach") !== "off"; } catch (e) {}
   const landingSpeed = h => h < 2000 ? Math.max(1.5, h / 10) : .9 * Math.sqrt(5 * h);     // safe speed for a height
   function climbTilt() {                                    // tilt that holds a steady climb to 20 km while building speed
@@ -183,6 +204,12 @@
     if (Q.fuel <= 0) return "Out of fuel";
     if (S.phase === P.ASCENT) {
       if (S.onPad) return "Press Z (or push the throttle up) to lift off";
+      if (Q.apo >= 60e3) {                                   // high enough on any world: coast to the top, then circularise
+        if (Q.vr < 4 || Q.h > Q.apo - 600) circ = true;      // start the burn right at the top, so it lifts the low point and not the high one
+        if (!circ) return ctl.thr > 0 ? "High enough. Cut the engine with X and coast to the top of your arc" : "Coasting to the top of your arc. Press . to speed up time";
+        if (ctl.hold !== "pro") return "At the top: press 2 to point prograde";
+        return ctl.thr < .5 ? "Now press Z and burn until the orbit's low point passes 10 km" : "Burning to raise the low point. Keep going";
+      }
       if (ctl.thr < .95) return "Keep full throttle: press Z";
       const want = climbTilt(), have = (ctl.hold === "manual" ? ctl.pitch : Math.atan2(P.dot(S.d, Q.et), P.dot(S.d, Q.er))) / DEG;
       if (Math.abs(want - have) <= 6) return want < 6 ? "Climb straight up" : `Good. Hold about ${want.toFixed(0)}° of tilt until the orbit's low point passes 10 km`;
@@ -376,7 +403,7 @@
     if (landed && Math.abs(o.vr) < .5) add("feather");
     if (o.ok && o.noCoach) add("nocoach");
     if (o.ok && m.goal === "orbit") add("orbit");
-    if (o.ok && m.id === "full") add("full");
+    if (o.ok && /full$/.test(m.id)) add("full");
     if (landed && o.fuel >= .25) add("miser");
     if (landed && m.id === "descent" && o.t < 60) add("hotdrop");
     if (prof.streak >= 3) add("streak3");
@@ -551,6 +578,7 @@
     if (navigator.share) navigator.share({title: "Moon Pilot", text: shareText, url}).catch(() => {});
     else if (navigator.clipboard) navigator.clipboard.writeText(shareText + " " + url).then(done).catch(() => {});
   };
+  try { const w = localStorage.getItem("moonpilot.world"); if (w && w !== "moon") setWorld(w); } catch (e) {}
   menu(); requestAnimationFrame(frame);
   // ?shot=landing|launch|orbit poses a scene and freezes it, for store screenshots (tools/shots.sh)
   const shot = new URLSearchParams(location.search).get("shot");

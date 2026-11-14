@@ -1,7 +1,7 @@
 // Real Moon physics for one rocket. A line-for-line port of the step in ai/orbit3d.py, so the
 // player and the AI ghost fly under exactly the same rules. SI units throughout.
 (function (root) {
-  const MU = 4.9048695e12, R = 1.7374e6, OMEGA = 2.6617e-6;          // gravity GM, radius, spin
+  let MU = 4.9048695e12, R = 1.7374e6, OMEGA = 2.6617e-6;          // gravity GM, radius, spin
   const G0 = 9.80665, ISP = 311, THRUST = 45000, M_WET = 15000, M_DRY = 2700;
   const MDOT = THRUST / (ISP * G0), SLEW = 10 * Math.PI / 180, TAU = 2 * Math.PI;
   const PERI_MIN = 10e3, APO_MAX = 100e3;                            // what counts as "in orbit"
@@ -70,7 +70,9 @@
     return null;
   }
 
-  const api = {MU, R, OMEGA, THRUST, M_WET, M_DRY, TAU, ASCENT, COAST, DESCENT, PERI_MIN, APO_MAX,
+  const api = {get MU() { return MU; }, get R() { return R; }, get OMEGA() { return OMEGA; },
+               setBody(b) { MU = b.mu; R = b.r; OMEGA = b.omega; },      // fly on another world
+               THRUST, M_WET, M_DRY, TAU, ASCENT, COAST, DESCENT, PERI_MIN, APO_MAX,
                add, mul, dot, cross, len, unit, clamp, create, derive, step, rules};
   if (typeof module !== "undefined") module.exports = api; else root.Physics = api;
 })(this);

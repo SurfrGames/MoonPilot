@@ -1,6 +1,6 @@
 // Offline support: serve the game from a cache and refresh the cache in the background.
 // Bump VERSION when a release must drop old files at once.
-const VERSION = "moon-pilot-v2";
+const VERSION = "moon-pilot-v3";
 const CORE = ["./", "index.html", "js/physics.js", "js/world.js", "js/backend.js", "js/game.js", "lib/three.min.js", "data/ghosts.js",
   "img/moon-2k.jpg", "img/moon-height.jpg", "icon-192.png", "favicon.png"];
 
